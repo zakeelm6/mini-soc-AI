@@ -221,7 +221,7 @@ Page `/correlation` — regroupe les alertes par :
 
 ```bash
 # Démarrer l'application
-cd /home/arthur-leywin/mini-soc
+cd /opt/mini-soc
 nohup venv/bin/gunicorn -w 2 -b 0.0.0.0:5000 app:app > /tmp/gunicorn.log 2>&1 &
 
 # Vérifier Ollama

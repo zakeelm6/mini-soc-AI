@@ -5,8 +5,8 @@
 # ══════════════════════════════════════════════════════════════════
 set -e
 
-SOC_DIR="/home/arthur-leywin/Documents/project-pfa/mini-soc"
-VENV="/home/arthur-leywin/mini-soc/venv/bin/python3"
+SOC_DIR="/opt/mini-soc"
+VENV="/opt/mini-soc/venv/bin/python3"
 
 GREEN='\033[0;32m'; YELLOW='\033[1;33m'; RED='\033[0;31m'
 BLUE='\033[0;34m'; CYAN='\033[0;36m'; NC='\033[0m'

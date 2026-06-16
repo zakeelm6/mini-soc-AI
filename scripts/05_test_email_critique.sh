@@ -4,8 +4,8 @@
 #  un email au L3 (admin) dès la création
 # ══════════════════════════════════════════════════════════════════
 
-VENV="/home/arthur-leywin/mini-soc/venv/bin/python3"
-SOC_DIR="/home/arthur-leywin/Documents/project-pfa/mini-soc"
+VENV="/opt/mini-soc/venv/bin/python3"
+SOC_DIR="/opt/mini-soc"
 
 GREEN='\033[0;32m'; RED='\033[0;31m'; YELLOW='\033[1;33m'; NC='\033[0m'
 

@@ -3409,8 +3409,8 @@ def api_ollama_retrain_rf():
     try:
         import subprocess
         result = subprocess.run(
-            ["/home/arthur-leywin/mini-soc/venv/bin/python3",
-             "/home/arthur-leywin/mini-soc/rf_detector.py", "--train-only"],
+            ["/opt/mini-soc/venv/bin/python3",
+             "/opt/mini-soc/rf_detector.py", "--train-only"],
             capture_output=True, text=True, timeout=120
         )
         lines = result.stdout.strip().split("\n")
@@ -3472,10 +3472,10 @@ def api_run_auto_label():
     try:
         import subprocess
         result = subprocess.run(
-            ["/home/arthur-leywin/mini-soc/venv/bin/python3",
-             "/home/arthur-leywin/mini-soc/auto_labeler.py", "--once"],
+            ["/opt/mini-soc/venv/bin/python3",
+             "/opt/mini-soc/auto_labeler.py", "--once"],
             capture_output=True, text=True, timeout=30,
-            cwd="/home/arthur-leywin/mini-soc",
+            cwd="/opt/mini-soc",
         )
         output = (result.stdout + result.stderr).strip()
         return jsonify({"status": "ok", "output": output, "returncode": result.returncode})

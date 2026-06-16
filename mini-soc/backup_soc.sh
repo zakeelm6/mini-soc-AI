@@ -1,10 +1,10 @@
 #!/bin/bash
 # Backup quotidien Mini-SOC — modèles ML + index ES critiques
-# Ajouter en crontab : 0 3 * * * /home/arthur-leywin/mini-soc/backup_soc.sh >> /var/log/soc_backup.log 2>&1
+# Ajouter en crontab : 0 3 * * * /opt/mini-soc/backup_soc.sh >> /var/log/soc_backup.log 2>&1
 
 set -euo pipefail
 
-SOC_DIR="/home/arthur-leywin/mini-soc"
+SOC_DIR="/opt/mini-soc"
 BACKUP_BASE="$SOC_DIR/backups"
 DATE=$(date +%Y%m%d_%H%M)
 BACKUP_DIR="$BACKUP_BASE/$DATE"

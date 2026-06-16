@@ -71,8 +71,8 @@ gunicorn -w 4 -b 0.0.0.0:5000 --timeout 300 app:app
 Description=Mini-SOC Post-Exploit Detector
 
 [Service]
-WorkingDirectory=/home/arthur-leywin/mini-soc
-ExecStart=/home/arthur-leywin/mini-soc/venv/bin/python postexploit_detector.py
+WorkingDirectory=/opt/mini-soc
+ExecStart=/opt/mini-soc/venv/bin/python postexploit_detector.py
 Restart=always
 RestartSec=10
 

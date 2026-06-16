@@ -114,7 +114,7 @@ echo "  Connexions SSH à 3h du matin simulées via timestamp log"
 echo "  L'Isolation Forest détecte la plage horaire anormale"
 echo ""
 # Injecter manuellement dans ES pour simuler (sans vraie connexion)
-/home/arthur-leywin/mini-soc/venv/bin/python3 - <<'EOF'
+/opt/mini-soc/venv/bin/python3 - <<'EOF'
 from elasticsearch import Elasticsearch
 from datetime import datetime, timezone, timedelta
 import random, time

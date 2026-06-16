@@ -6,7 +6,7 @@
 # ══════════════════════════════════════════════════════════════════
 
 SOC_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-PYTHON="/home/arthur-leywin/mini-soc/venv/bin/python3"
+PYTHON="/opt/mini-soc/venv/bin/python3"
 LOG="/tmp/flask.log"
 WATCHDOG_LOG="/tmp/watchdog.log"
 RESTART_DELAY=3

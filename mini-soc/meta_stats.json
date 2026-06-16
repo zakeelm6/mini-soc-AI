@@ -35,5 +35,5 @@
     "w_rate": 0.194
   },
   "meta_f1": 0.989,
-  "model_path": "/home/arthur-leywin/Documents/project-pfa/mini-soc/meta_model.pkl"
+  "model_path": "/opt/mini-soc/meta_model.pkl"
 }
