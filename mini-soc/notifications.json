@@ -1,0 +1,31 @@
+{
+  "enabled": true,
+  "notify_on_assign": true,
+  "notify_on_escalate": true,
+  "notify_on_sla_breach": true,
+  "notify_severities": [
+    "critical",
+    "high",
+    "medium",
+    "low"
+  ],
+  "email": {
+    "enabled": false,
+    "smtp_host": "smtp.gmail.com",
+    "smtp_port": 465,
+    "smtp_user": "",
+    "smtp_pass": "",
+    "from_addr": "",
+    "to_addrs": [
+      "analyst.l1@example.com",
+      "analyst.l2@example.com",
+      "admin@example.com"
+    ],
+    "use_ssl": true
+  },
+  "webhook": {
+    "enabled": false,
+    "url": "",
+    "type": "slack"
+  }
+}

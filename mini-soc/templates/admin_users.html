@@ -1,0 +1,231 @@
+{% extends "base.html" %}
+{% block title %}Gestion des comptes{% endblock %}
+{% block content %}
+
+<div class="d-flex justify-content-between align-items-center mb-3">
+  <h5 style="color:var(--text); margin:0; font-weight:700;">
+    <i class="fas fa-users me-2" style="color:var(--blue);"></i>Gestion des comptes SOC
+  </h5>
+  <button onclick="document.getElementById('modal-new').style.display='flex'" class="btn-soc btn-soc-primary">
+    <i class="fas fa-plus me-1"></i>Nouveau compte
+  </button>
+</div>
+
+<div class="card-section" style="padding:0; overflow:hidden;">
+  <table class="table soc-table mb-0">
+    <thead>
+      <tr>
+        <th>Identifiant</th>
+        <th>Nom</th>
+        <th>Niveau</th>
+        <th>Email</th>
+        <th>Statut</th>
+        <th>Actions</th>
+      </tr>
+    </thead>
+    <tbody>
+    {% for u in users %}
+    <tr data-user="{{ u.username }}">
+      <td style="font-family:monospace; color:var(--blue);">{{ u.username }}</td>
+      <td style="font-weight:500;">{{ u.name }}</td>
+      <td>
+        <span style="font-size:0.72rem; font-weight:700; padding:3px 10px; border-radius:12px;
+          background:{% if u.level == 'L3' %}rgba(248,81,73,0.15); color:var(--red)
+                     {% elif u.level == 'L2' %}rgba(255,166,87,0.15); color:#ffa657
+                     {% else %}rgba(88,166,255,0.15); color:var(--blue){% endif %};">
+          {{ u.level }}
+        </span>
+      </td>
+      <td style="font-size:0.8rem;">
+        <div style="display:flex;align-items:center;gap:6px;">
+          <span id="email-{{ u.username }}" style="color:var(--muted);">{{ u.email or '—' }}</span>
+          <button onclick="editEmail('{{ u.username }}','{{ u.email or '' }}')"
+                  style="background:none;border:none;color:var(--blue);font-size:0.7rem;cursor:pointer;padding:0;">
+            <i class="fas fa-edit"></i>
+          </button>
+        </div>
+      </td>
+      <td>
+        {% if u.active %}
+          <span style="color:var(--green); font-size:0.78rem;"><i class="fas fa-circle me-1" style="font-size:0.6rem;"></i>Actif</span>
+        {% else %}
+          <span style="color:var(--muted); font-size:0.78rem;"><i class="fas fa-circle me-1" style="font-size:0.6rem;"></i>Désactivé</span>
+        {% endif %}
+      </td>
+      <td>
+        {% if u.username != current_user.username %}
+        <form method="POST" action="/admin/users/{{ u.username }}/toggle" style="display:inline;">
+          <button type="submit" class="btn-soc" style="font-size:0.75rem; padding:4px 10px;"
+                  title="{{ 'Désactiver' if u.active else 'Activer' }}">
+            <i class="fas fa-{{ 'ban' if u.active else 'check' }}"></i>
+            {{ 'Désactiver' if u.active else 'Activer' }}
+          </button>
+        </form>
+        <button onclick="openReset('{{ u.username }}')" class="btn-soc" style="font-size:0.75rem; padding:4px 10px;">
+          <i class="fas fa-key"></i> Reset MDP
+        </button>
+        <button onclick="deleteUser('{{ u.username }}', '{{ u.name }}')"
+                class="btn-soc" style="font-size:0.75rem;padding:4px 10px;background:rgba(248,81,73,0.12);border-color:rgba(248,81,73,0.4);color:#f85149;">
+          <i class="fas fa-trash-alt"></i> Supprimer
+        </button>
+        {% else %}
+          <span style="color:var(--muted); font-size:0.75rem;">(vous)</span>
+        {% endif %}
+      </td>
+    </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</div>
+
+<!-- Légende niveaux -->
+<div class="card-section mt-3">
+  <div class="section-title">Niveaux d'accès</div>
+  <div class="row g-3">
+    <div class="col-md-4">
+      <div style="background:rgba(88,166,255,0.08); border:1px solid var(--blue); border-radius:8px; padding:12px;">
+        <div style="color:var(--blue); font-weight:700; margin-bottom:6px;"><i class="fas fa-user me-1"></i>L1 — Analyste junior</div>
+        <ul style="font-size:0.78rem; color:var(--muted); margin:0; padding-left:16px;">
+          <li>Voir les logs, CVE, mesures</li>
+          <li>Voir ses incidents assignés</li>
+          <li>Mettre à jour statut/verdict (ses incidents)</li>
+        </ul>
+      </div>
+    </div>
+    <div class="col-md-4">
+      <div style="background:rgba(255,166,87,0.08); border:1px solid #ffa657; border-radius:8px; padding:12px;">
+        <div style="color:#ffa657; font-weight:700; margin-bottom:6px;"><i class="fas fa-user-shield me-1"></i>L2 — Analyste senior</div>
+        <ul style="font-size:0.78rem; color:var(--muted); margin:0; padding-left:16px;">
+          <li>Tous les incidents + analytics</li>
+          <li>Créer et réassigner des incidents</li>
+          <li>Accès IA, Autoencoder, Comparaison</li>
+        </ul>
+      </div>
+    </div>
+    <div class="col-md-4">
+      <div style="background:rgba(248,81,73,0.08); border:1px solid var(--red); border-radius:8px; padding:12px;">
+        <div style="color:var(--red); font-weight:700; margin-bottom:6px;"><i class="fas fa-crown me-1"></i>L3 — Admin SOC</div>
+        <ul style="font-size:0.78rem; color:var(--muted); margin:0; padding-left:16px;">
+          <li>Accès complet à toute la plateforme</li>
+          <li>Gestion des comptes utilisateurs</li>
+          <li>Configuration système</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Modal nouveau compte -->
+<div id="modal-new" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.7); z-index:1000; align-items:center; justify-content:center;">
+  <div style="background:var(--bg2); border:1px solid var(--border); border-radius:12px; padding:28px; width:420px;">
+    <div class="d-flex justify-content-between align-items-center mb-3">
+      <h6 style="color:var(--blue); margin:0;"><i class="fas fa-user-plus me-2"></i>Nouveau compte</h6>
+      <button onclick="document.getElementById('modal-new').style.display='none'"
+              style="background:none;border:none;color:var(--muted);font-size:1.2rem;cursor:pointer;">×</button>
+    </div>
+    <form method="POST" action="/admin/users/new">
+      <div class="mb-2">
+        <label style="font-size:0.75rem; color:var(--muted);">Identifiant *</label>
+        <input type="text" name="username" required placeholder="ex: analyst3"
+               style="background:var(--bg3);border:1px solid var(--border);color:var(--text);border-radius:6px;padding:7px 10px;font-size:0.85rem;width:100%;outline:none;">
+      </div>
+      <div class="mb-2">
+        <label style="font-size:0.75rem; color:var(--muted);">Nom complet</label>
+        <input type="text" name="name" placeholder="ex: Emma Petit"
+               style="background:var(--bg3);border:1px solid var(--border);color:var(--text);border-radius:6px;padding:7px 10px;font-size:0.85rem;width:100%;outline:none;">
+      </div>
+      <div class="row g-2 mb-2">
+        <div class="col-6">
+          <label style="font-size:0.75rem; color:var(--muted);">Niveau</label>
+          <select name="level" style="background:var(--bg3);border:1px solid var(--border);color:var(--text);border-radius:6px;padding:7px 10px;font-size:0.85rem;width:100%;">
+            <option value="L1">L1 — Analyste</option>
+            <option value="L2">L2 — Senior</option>
+            <option value="L3">L3 — Admin</option>
+          </select>
+        </div>
+        <div class="col-6">
+          <label style="font-size:0.75rem; color:var(--muted);">Email</label>
+          <input type="email" name="email" placeholder="email@soc.local"
+                 style="background:var(--bg3);border:1px solid var(--border);color:var(--text);border-radius:6px;padding:7px 10px;font-size:0.85rem;width:100%;outline:none;">
+        </div>
+      </div>
+      <div class="mb-3">
+        <label style="font-size:0.75rem; color:var(--muted);">Mot de passe *</label>
+        <input type="password" name="password" required placeholder="••••••••"
+               style="background:var(--bg3);border:1px solid var(--border);color:var(--text);border-radius:6px;padding:7px 10px;font-size:0.85rem;width:100%;outline:none;">
+      </div>
+      <div class="d-flex gap-2 justify-content-end">
+        <button type="button" onclick="document.getElementById('modal-new').style.display='none'"
+                class="btn-soc">Annuler</button>
+        <button type="submit" class="btn-soc btn-soc-primary">Créer</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- Modal reset mot de passe -->
+<div id="modal-reset" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.7); z-index:1000; align-items:center; justify-content:center;">
+  <div style="background:var(--bg2); border:1px solid var(--border); border-radius:12px; padding:28px; width:380px;">
+    <h6 style="color:var(--yellow); margin-bottom:16px;"><i class="fas fa-key me-2"></i>Réinitialiser le mot de passe</h6>
+    <form method="POST" id="reset-form" action="">
+      <input type="password" name="password" required placeholder="Nouveau mot de passe"
+             style="background:var(--bg3);border:1px solid var(--border);color:var(--text);border-radius:6px;padding:7px 10px;font-size:0.85rem;width:100%;outline:none;margin-bottom:12px;">
+      <div class="d-flex gap-2 justify-content-end">
+        <button type="button" onclick="document.getElementById('modal-reset').style.display='none'"
+                class="btn-soc">Annuler</button>
+        <button type="submit" class="btn-soc" style="border-color:var(--yellow);color:var(--yellow);">Réinitialiser</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- Modal email -->
+<div id="modal-email" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.7); z-index:1000; align-items:center; justify-content:center;">
+  <div style="background:var(--bg2); border:1px solid var(--border); border-radius:12px; padding:28px; width:420px;">
+    <h6 style="color:var(--blue); margin-bottom:6px;"><i class="fas fa-envelope me-2"></i>Modifier l'email</h6>
+    <div style="font-size:0.75rem;color:var(--muted);margin-bottom:14px;">
+      Cet email sera utilisé pour les notifications d'incidents selon le niveau de sévérité.
+    </div>
+    <form method="POST" id="email-form" action="">
+      <input type="email" name="email" id="email-input" required placeholder="analyste@example.com"
+             style="background:var(--bg3);border:1px solid var(--border);color:var(--text);border-radius:6px;
+                    padding:7px 10px;font-size:0.85rem;width:100%;outline:none;margin-bottom:12px;">
+      <div style="font-size:0.72rem;color:var(--muted);margin-bottom:12px;">
+        <i class="fas fa-info-circle me-1" style="color:var(--blue);"></i>
+        L1 → reçoit ses incidents assignés · L2 → reçoit HIGH + CRITICAL · L3 → reçoit tout CRITICAL
+      </div>
+      <div class="d-flex gap-2 justify-content-end">
+        <button type="button" onclick="document.getElementById('modal-email').style.display='none'"
+                class="btn-soc">Annuler</button>
+        <button type="submit" class="btn-soc btn-soc-primary">Sauvegarder</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<script>
+function openReset(username) {
+  document.getElementById('reset-form').action = '/admin/users/' + username + '/reset_password';
+  document.getElementById('modal-reset').style.display = 'flex';
+}
+function editEmail(username, currentEmail) {
+  document.getElementById('email-form').action = '/admin/users/' + username + '/update_email';
+  document.getElementById('email-input').value = currentEmail;
+  document.getElementById('modal-email').style.display = 'flex';
+}
+async function deleteUser(username, name) {
+  if (!confirm(`Supprimer définitivement l'utilisateur "${name}" (${username}) ?\nCette action est irréversible.`)) return;
+  try {
+    const r = await fetch(`/admin/users/${encodeURIComponent(username)}/delete`, { method: 'POST' });
+    const d = await r.json();
+    if (r.ok && d.status === 'ok') {
+      const row = document.querySelector(`tr[data-user="${username}"]`);
+      if (row) { row.style.opacity='0'; row.style.transition='opacity 0.3s'; setTimeout(()=>row.remove(), 300); }
+      else location.reload();
+    } else {
+      alert(d.error || 'Erreur lors de la suppression');
+    }
+  } catch(e) { alert('Erreur réseau'); }
+}
+</script>
+{% endblock %}

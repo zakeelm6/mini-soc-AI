@@ -1,0 +1,429 @@
+{% extends "base.html" %}
+{% block title %}Logs{% endblock %}
+{% block content %}
+<style>
+  .filter-bar { background: var(--bg2); border: 1px solid var(--border); border-radius: 10px; padding: 14px 18px; margin-bottom: 18px; }
+  .filter-bar label { font-size: 0.72rem; color: var(--muted); text-transform: uppercase; letter-spacing: 1px; display: block; margin-bottom: 4px; }
+  .f-input { background: var(--bg3); border: 1px solid var(--border); color: var(--text); border-radius: 6px; padding: 5px 10px; font-size: 0.82rem; width: 100%; }
+  .f-input:focus { outline: none; border-color: var(--blue); }
+  .f-input option { background: var(--bg3); }
+  .pagination-bar { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-top: 12px; }
+  .page-btn { background: var(--bg3); border: 1px solid var(--border); color: var(--text); border-radius: 6px; padding: 5px 14px; font-size: 0.82rem; cursor: pointer; transition: all 0.2s; }
+  .page-btn:hover:not(:disabled) { border-color: var(--blue); color: var(--blue); }
+  .page-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+  .tag-pill { display: inline-block; font-size: 0.65rem; padding: 2px 7px; border-radius: 10px; background: rgba(88,166,255,0.12); color: var(--blue); border: 1px solid rgba(88,166,255,0.3); margin: 1px; }
+  .sortable { cursor: pointer; user-select: none; white-space: nowrap; }
+  .sortable:hover { color: var(--blue); }
+  .sort-arrow { font-size: 0.65rem; margin-left: 3px; opacity: 0.5; }
+  .sort-arrow.active { opacity: 1; color: var(--blue); }
+  .toast-container { position: fixed; top: 20px; right: 20px; z-index: 9999; }
+  .soc-toast { background: var(--bg2); border: 1px solid var(--border); border-radius: 8px; padding: 12px 18px; color: var(--text); font-size: 0.83rem; margin-bottom: 8px; animation: slideIn 0.3s ease; }
+  @keyframes slideIn { from { transform: translateX(100px); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
+  .loading-row td { text-align: center; padding: 40px; color: var(--muted); }
+  .msg-cell { max-width: 360px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  #logsBody tr:hover td { background: rgba(88,166,255,0.04); }
+</style>
+
+<div class="toast-container" id="toastContainer"></div>
+
+<div class="d-flex justify-content-between align-items-center mb-3">
+  <h5 class="mb-0"><i class="fas fa-file-alt me-2" style="color:var(--blue)"></i>Logs — Vue paginée</h5>
+  <div class="d-flex gap-2 align-items-center">
+    <span class="text-muted small" id="totalCount">—</span>
+    <a href="#" onclick="exportCSV(event)" class="btn-soc">
+      <i class="fas fa-download me-1"></i>Exporter CSV
+    </a>
+  </div>
+</div>
+
+<!-- Filter bar -->
+<div class="filter-bar">
+  <div class="row g-2 align-items-end">
+    <div class="col-md-2 col-sm-6">
+      <label>IP source</label>
+      <input type="text" id="f_ip" class="f-input" placeholder="ex: 192.168.1.1" oninput="debounceLoad()">
+    </div>
+    <div class="col-md-2 col-sm-6">
+      <label>Sévérité</label>
+      <select id="f_sev" class="f-input" onchange="resetAndLoad()">
+        <option value="">Toutes</option>
+        <option value="low">Low</option>
+        <option value="medium">Medium</option>
+        <option value="high">High</option>
+        <option value="critical">Critical</option>
+      </select>
+    </div>
+    <div class="col-md-2 col-sm-6">
+      <label>Type</label>
+      <select id="f_type" class="f-input" onchange="resetAndLoad()">
+        <option value="">Tous</option>
+        <option value="auth">auth</option>
+        <option value="apache_access">apache_access</option>
+        <option value="apache_error">apache_error</option>
+        <option value="syslog">syslog</option>
+        <option value="suricata">suricata</option>
+      </select>
+    </div>
+    <div class="col-md-2 col-sm-6">
+      <label>Tag</label>
+      <select id="f_tag" class="f-input" onchange="resetAndLoad()">
+        <option value="">Tous</option>
+        <option value="ssh_failed">ssh_failed</option>
+        <option value="ssh_success">ssh_success</option>
+        <option value="http_error">http_error</option>
+        <option value="auth_failure">auth_failure</option>
+        <option value="ids_alert">ids_alert</option>
+      </select>
+    </div>
+    <div class="col-md-2 col-sm-6">
+      <label>De</label>
+      <input type="datetime-local" id="f_from" class="f-input" onchange="resetAndLoad()">
+    </div>
+    <div class="col-md-2 col-sm-6">
+      <label>À</label>
+      <input type="datetime-local" id="f_to" class="f-input" onchange="resetAndLoad()">
+    </div>
+    <div class="col-md-3 col-sm-6">
+      <label>Recherche texte</label>
+      <input type="text" id="f_q" class="f-input" placeholder="message, ssh_user, ip..." oninput="debounceLoad()">
+    </div>
+    <div class="col-md-1 col-sm-4">
+      <label>Par page</label>
+      <select id="f_size" class="f-input" onchange="currentSize=parseInt(this.value); resetAndLoad()">
+        <option value="25" selected>25</option>
+        <option value="50">50</option>
+        <option value="100">100</option>
+      </select>
+    </div>
+    <div class="col-md-2 col-sm-4 d-flex gap-2">
+      <button onclick="resetAndLoad()" class="btn-soc btn-soc-primary w-100" style="justify-content:center">
+        <i class="fas fa-search me-1"></i>Filtrer
+      </button>
+      <button onclick="clearFilters()" class="btn-soc" style="padding:5px 12px; justify-content:center">
+        <i class="fas fa-times"></i>
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- Table -->
+<div class="card-section" style="padding:0; overflow:hidden;">
+  <table class="table soc-table mb-0" id="logsTable">
+    <thead>
+      <tr>
+        <th class="sortable" onclick="sortBy('@timestamp')">
+          Timestamp <span class="sort-arrow active" id="sort-@timestamp">↓</span>
+        </th>
+        <th>Type</th>
+        <th class="sortable" onclick="sortBy('severity')">
+          Sévérité <span class="sort-arrow" id="sort-severity">↑↓</span>
+        </th>
+        <th class="sortable" onclick="sortBy('src_ip')">
+          IP source <span class="sort-arrow" id="sort-src_ip">↑↓</span>
+        </th>
+        <th>SSH user</th>
+        <th>Tags</th>
+        <th>Message</th>
+        <th style="width:36px;"></th>
+      </tr>
+    </thead>
+    <tbody id="logsBody">
+      <tr class="loading-row"><td colspan="8"><i class="fas fa-spinner fa-spin me-2"></i>Chargement...</td></tr>
+    </tbody>
+  </table>
+</div>
+
+<!-- Pagination -->
+<div class="pagination-bar">
+  <button class="page-btn" id="btnPrev" onclick="prevPage()" disabled>
+    <i class="fas fa-chevron-left me-1"></i>Précédent
+  </button>
+  <span id="pageInfo" class="text-muted small">Page 1 / 1</span>
+  <button class="page-btn" id="btnNext" onclick="nextPage()" disabled>
+    Suivant<i class="fas fa-chevron-right ms-1"></i>
+  </button>
+  <span class="text-muted small ms-2" id="resultInfo">—</span>
+</div>
+
+<script>
+let currentPage = 1, currentSize = 25, currentSort = '@timestamp', currentOrder = 'desc';
+let debounceTimer = null;
+
+const SEV_COLORS = {
+  critical: 'sev-critical', high: 'sev-high',
+  medium: 'sev-medium', low: 'sev-low', info: 'sev-info'
+};
+const TYPE_COLORS = {
+  auth: '#58a6ff', apache_access: '#56d364', apache_error: '#f85149',
+  syslog: '#e3b341', suricata: '#bc8cff'
+};
+
+function debounceLoad() {
+  clearTimeout(debounceTimer);
+  debounceTimer = setTimeout(() => { currentPage = 1; loadLogs(); }, 450);
+}
+
+function resetAndLoad() {
+  currentPage = 1;
+  loadLogs();
+}
+
+function loadLogs() {
+  const dateFrom = document.getElementById('f_from').value;
+  const dateTo   = document.getElementById('f_to').value;
+  const params = new URLSearchParams({
+    page:      currentPage,
+    size:      currentSize,
+    sort:      currentSort,
+    order:     currentOrder,
+    src_ip:    document.getElementById('f_ip').value,
+    severity:  document.getElementById('f_sev').value,
+    log_type:  document.getElementById('f_type').value,
+    tag:       document.getElementById('f_tag').value,
+    q:         document.getElementById('f_q').value,
+    date_from: dateFrom ? new Date(dateFrom).toISOString() : 'now-24h',
+    date_to:   dateTo   ? new Date(dateTo).toISOString()   : 'now'
+  });
+  document.getElementById('logsBody').innerHTML =
+    '<tr class="loading-row"><td colspan="7"><i class="fas fa-spinner fa-spin me-2"></i>Chargement...</td></tr>';
+
+  fetch('/api/logs?' + params)
+    .then(r => r.json())
+    .then(data => renderLogs(data))
+    .catch(() => {
+      document.getElementById('logsBody').innerHTML =
+        '<tr class="loading-row"><td colspan="7" style="color:var(--red)"><i class="fas fa-exclamation-triangle me-2"></i>Erreur de chargement</td></tr>';
+    });
+}
+
+function renderLogs(data) {
+  const tbody = document.getElementById('logsBody');
+  const total = data.total || 0;
+  const hits  = data.hits  || [];
+
+  document.getElementById('totalCount').textContent =
+    `${total.toLocaleString()} log(s) total`;
+  document.getElementById('pageInfo').textContent =
+    `Page ${data.page} / ${data.pages}`;
+  document.getElementById('resultInfo').textContent =
+    `Affichage ${((data.page-1)*data.size)+1}–${Math.min(data.page*data.size, total)} sur ${total}`;
+
+  document.getElementById('btnPrev').disabled = data.page <= 1;
+  document.getElementById('btnNext').disabled = data.page >= data.pages;
+
+  if (!hits.length) {
+    tbody.innerHTML =
+      '<tr class="loading-row"><td colspan="8">Aucun résultat pour ces filtres</td></tr>';
+    return;
+  }
+
+  let html = '';
+  for (const h of hits) {
+    const ts     = toLocal(h['@timestamp']);
+    const sev    = h.severity || 'info';
+    const sevCls = SEV_COLORS[sev] || 'sev-info';
+    const type   = h.log_type || '—';
+    const typeColor = TYPE_COLORS[type] || 'var(--muted)';
+    const ip     = h.src_ip    || '—';
+    const user   = h.ssh_user  || '';
+    const rawMsg = h.message   || '';
+    const msg    = rawMsg.slice(0, 80);
+    const tags   = Array.isArray(h.tags) ? h.tags
+                   : (h.tags ? String(h.tags).split(',') : []);
+
+    const tagHtml = tags.filter(t => t && t !== 'beats_input_codec_plain_applied')
+      .map(t => `<span class="tag-pill">${esc(t)}</span>`).join('');
+
+    const logId    = h._id    || '';
+    const logIndex = h._index || '';
+    const detailUrl = logId && logIndex ? `/logs/${encodeURIComponent(logIndex)}/${encodeURIComponent(logId)}` : '';
+
+    html += `<tr style="cursor:${detailUrl?'pointer':''}" onclick="${detailUrl?`window.location='${detailUrl}'`:''}" title="${detailUrl?'Ouvrir le détail':''}">
+      <td style="white-space:nowrap;color:var(--muted);font-size:0.78rem">${esc(ts)}</td>
+      <td><span class="type-mono" style="color:${typeColor}">${esc(type)}</span></td>
+      <td><span class="badge-sev ${sevCls}">${esc(sev)}</span></td>
+      <td style="font-family:monospace;font-size:0.8rem;color:var(--blue)">${esc(ip)}</td>
+      <td style="font-size:0.8rem;color:var(--muted)">${esc(user)}</td>
+      <td>${tagHtml}</td>
+      <td class="msg-cell" title="${esc(rawMsg)}"><code class="msg">${esc(msg)}${rawMsg.length>80?'…':''}</code></td>
+      <td style="padding:4px 6px;">${detailUrl ? `<a href="${detailUrl}" onclick="event.stopPropagation()" class="btn-soc" style="padding:2px 6px;font-size:0.60rem;"><i class="fas fa-external-link-alt"></i></a>` : ''}</td>
+    </tr>`;
+  }
+  tbody.innerHTML = html;
+}
+
+function sortBy(field) {
+  if (currentSort === field) {
+    currentOrder = currentOrder === 'desc' ? 'asc' : 'desc';
+  } else {
+    currentSort  = field;
+    currentOrder = 'desc';
+  }
+  document.querySelectorAll('.sort-arrow').forEach(el => {
+    el.textContent = '↑↓'; el.classList.remove('active');
+  });
+  const el = document.getElementById('sort-' + field);
+  if (el) { el.textContent = currentOrder === 'desc' ? '↓' : '↑'; el.classList.add('active'); }
+  currentPage = 1;
+  loadLogs();
+}
+
+function prevPage() { if (currentPage > 1) { currentPage--; loadLogs(); } }
+function nextPage() { currentPage++; loadLogs(); }
+
+function exportCSV(e) {
+  e.preventDefault();
+  const dateFrom = document.getElementById('f_from').value;
+  const dateTo   = document.getElementById('f_to').value;
+  const params = new URLSearchParams({
+    src_ip:    document.getElementById('f_ip').value,
+    severity:  document.getElementById('f_sev').value,
+    log_type:  document.getElementById('f_type').value,
+    tag:       document.getElementById('f_tag').value,
+    q:         document.getElementById('f_q').value,
+    date_from: dateFrom ? new Date(dateFrom).toISOString() : 'now-24h',
+    date_to:   dateTo   ? new Date(dateTo).toISOString()   : 'now'
+  });
+  window.location.href = '/api/logs/export?' + params;
+  showToast('<i class="fas fa-check me-2" style="color:var(--green)"></i>Export CSV en cours…');
+}
+
+function clearFilters() {
+  ['f_ip','f_sev','f_type','f_tag','f_q','f_from','f_to'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.value = '';
+  });
+  currentPage = 1; currentSort = '@timestamp'; currentOrder = 'desc';
+  document.querySelectorAll('.sort-arrow').forEach(el => {
+    el.textContent = '↑↓'; el.classList.remove('active');
+  });
+  const ts = document.getElementById('sort-@timestamp');
+  if (ts) { ts.textContent = '↓'; ts.classList.add('active'); }
+  loadLogs();
+}
+
+function esc(s) {
+  if (!s) return '';
+  return String(s)
+    .replace(/&/g,'&amp;').replace(/</g,'&lt;')
+    .replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+function showToast(msg) {
+  const c = document.getElementById('toastContainer');
+  const t = document.createElement('div');
+  t.className = 'soc-toast'; t.innerHTML = msg;
+  c.appendChild(t);
+  setTimeout(() => t.remove(), 3000);
+}
+
+loadLogs();
+setInterval(loadLogs, 10000);
+
+// ── Live stream : nouveaux logs toutes les 5s ─────────────────────────────
+(function() {
+  let liveTs   = new Date().toISOString();
+  let liveCount = 0;
+  const ATTACKER_IPS = ['192.168.122.103', '192.168.122.1'];
+
+  const banner = document.createElement('div');
+  banner.id = 'live-log-banner';
+  banner.style.cssText = `
+    display:none; position:fixed; top:14px; right:14px; z-index:9999;
+    background:#f85149; color:#fff; border-radius:8px; padding:8px 18px;
+    font-size:0.82rem; font-weight:700; box-shadow:0 4px 20px rgba(248,81,73,0.5);
+    cursor:pointer; animation:bannerPulse 1s ease infinite alternate;`;
+  banner.innerHTML = '<i class="fas fa-satellite-dish me-2"></i><span id="liveBannerText">0 nouveaux logs</span>';
+  banner.onclick = () => { liveCount=0; banner.style.display='none'; loadLogs(); };
+  document.body.appendChild(banner);
+
+  const liveIndicator = document.createElement('span');
+  liveIndicator.id = 'liveIndicator';
+  liveIndicator.style.cssText = 'font-size:0.72rem; color:var(--green); margin-left:8px;';
+  liveIndicator.innerHTML = '<i class="fas fa-circle" style="font-size:0.5rem;animation:livePulse 1.5s ease infinite"></i> LIVE';
+  const h5 = document.querySelector('h5.mb-0');
+  if (h5) h5.appendChild(liveIndicator);
+
+  const style = document.createElement('style');
+  style.textContent = `
+    @keyframes livePulse { 0%,100%{opacity:1} 50%{opacity:0.3} }
+    @keyframes bannerPulse { from{box-shadow:0 4px 20px rgba(248,81,73,0.5)} to{box-shadow:0 4px 30px rgba(248,81,73,0.9)} }
+    @keyframes logFlash { 0%{background:rgba(248,81,73,0.25)} 100%{background:transparent} }
+    .new-log-row { animation: logFlash 2s ease forwards; }
+    .attacker-ip { color:#f85149 !important; font-weight:700; }
+  `;
+  document.head.appendChild(style);
+
+  function rowHtml(h) {
+    const ts     = toLocal(h['@timestamp']);
+    const sev    = h.severity || 'info';
+    const sevCls = SEV_COLORS[sev] || 'sev-info';
+    const type   = h.log_type || '—';
+    const typeColor = TYPE_COLORS[type] || 'var(--muted)';
+    const ip     = h.src_ip || '—';
+    const ipCls  = ATTACKER_IPS.includes(ip) ? 'attacker-ip' : '';
+    const user   = h.ssh_user || '';
+    const rawMsg = h.message || '';
+    const msg    = rawMsg.slice(0, 80);
+    const tags   = Array.isArray(h.tags) ? h.tags : (h.tags ? String(h.tags).split(',') : []);
+    const tagHtml = tags.filter(t=>t&&t!=='beats_input_codec_plain_applied')
+      .map(t=>`<span class="tag-pill">${esc(t)}</span>`).join('');
+    const logId    = h._id    || '';
+    const logIndex = h._index || '';
+    const detailUrl = logId && logIndex ? `/logs/${encodeURIComponent(logIndex)}/${encodeURIComponent(logId)}` : '';
+    return `<tr class="new-log-row" style="cursor:${detailUrl?'pointer':''}">
+      <td style="white-space:nowrap;color:var(--muted);font-size:0.78rem">${esc(ts)}</td>
+      <td><span class="type-mono" style="color:${typeColor}">${esc(type)}</span></td>
+      <td><span class="badge-sev ${sevCls}">${esc(sev)}</span></td>
+      <td style="font-family:monospace;font-size:0.8rem;" class="${ipCls}">${esc(ip)}</td>
+      <td style="font-size:0.8rem;color:var(--muted)">${esc(user)}</td>
+      <td>${tagHtml}</td>
+      <td class="msg-cell" title="${esc(rawMsg)}"><code class="msg">${esc(msg)}${rawMsg.length>80?'…':''}</code></td>
+      <td>${detailUrl?`<a href="${detailUrl}" class="btn-soc" style="padding:2px 6px;font-size:0.60rem;"><i class="fas fa-external-link-alt"></i></a>`:''}</td>
+    </tr>`;
+  }
+
+  function pollLive() {
+    fetch(`/api/logs/live?since=${encodeURIComponent(liveTs)}&size=20`)
+      .then(r => r.json())
+      .then(data => {
+        if (!data.hits || !data.hits.length) return;
+        liveTs = data.latest_ts;
+        liveCount += data.hits.length;
+
+        // Insert new rows at top of table
+        const tbody = document.getElementById('logsBody');
+        if (tbody && !tbody.querySelector('.loading-row')) {
+          const frag = document.createElement('tbody');
+          frag.innerHTML = data.hits.map(rowHtml).join('');
+          Array.from(frag.children).reverse().forEach(tr => {
+            tbody.insertBefore(tr, tbody.firstChild);
+          });
+        }
+
+        // Show banner
+        document.getElementById('liveBannerText').textContent =
+          `${liveCount} nouveau${liveCount>1?'x':''} log${liveCount>1?'s':''}`;
+        banner.style.display = 'block';
+
+        // Update title
+        const origTitle = document.title.replace(/^\[\d+\] /, '');
+        document.title = `[${liveCount}] ${origTitle}`;
+        setTimeout(() => { document.title = origTitle; }, 6000);
+
+        // Toast for SSH attacks
+        const attacks = data.hits.filter(h =>
+          ['ssh_failed','auth_failure'].some(t => (h.tags||[]).includes(t)) ||
+          /failed password|invalid user/i.test(h.message||''));
+        if (attacks.length) {
+          const ip = attacks[0].src_ip || '?';
+          showToast(`<i class="fas fa-exclamation-triangle me-2" style="color:var(--red)"></i><b>${attacks.length} log(s) SSH suspect(s)</b> — ${ip}`);
+        }
+      })
+      .catch(() => {});
+  }
+
+  setInterval(pollLive, 5000);
+})();
+</script>
+{% endblock %}

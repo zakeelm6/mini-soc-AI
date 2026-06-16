@@ -1,0 +1,187 @@
+services:
+
+  # ──────────────────────────────────────────────────────────
+  # Elasticsearch 8.x — SIEM
+  # ──────────────────────────────────────────────────────────
+  elasticsearch:
+    image: docker.elastic.co/elasticsearch/elasticsearch:8.12.2
+    container_name: soc-elasticsearch
+    environment:
+      - discovery.type=single-node
+      - ELASTIC_PASSWORD=${ES_PASSWORD:-changeme}
+      - xpack.security.enabled=true
+      - xpack.security.http.ssl.enabled=false
+      - xpack.security.transport.ssl.enabled=false
+      - ES_JAVA_OPTS=-Xms1g -Xmx1g
+    volumes:
+      - es_data:/usr/share/elasticsearch/data
+    ports:
+      - "9200:9200"
+    networks:
+      - soc-net
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf -u elastic:${ES_PASSWORD:-changeme} http://localhost:9200/_cluster/health | grep -qE '\"status\":\"(green|yellow)\"'"]
+      interval: 15s
+      timeout: 10s
+      retries: 12
+      start_period: 40s
+    restart: unless-stopped
+
+  # ──────────────────────────────────────────────────────────
+  # Kibana — Dashboards
+  # ──────────────────────────────────────────────────────────
+  kibana:
+    image: docker.elastic.co/kibana/kibana:8.12.2
+    container_name: soc-kibana
+    environment:
+      - ELASTICSEARCH_HOSTS=http://elasticsearch:9200
+      - ELASTICSEARCH_USERNAME=elastic
+      - ELASTICSEARCH_PASSWORD=${ES_PASSWORD:-changeme}
+      - XPACK_SECURITY_ENABLED=true
+    ports:
+      - "5601:5601"
+    networks:
+      - soc-net
+    depends_on:
+      elasticsearch:
+        condition: service_healthy
+    restart: unless-stopped
+
+  # ──────────────────────────────────────────────────────────
+  # Ollama — LLM local (llama3 + gemma2 + nomic-embed-text)
+  # ──────────────────────────────────────────────────────────
+  ollama:
+    image: ollama/ollama:latest
+    container_name: soc-ollama
+    volumes:
+      - ollama_data:/root/.ollama
+    ports:
+      - "11434:11434"
+    networks:
+      - soc-net
+    # GPU Nvidia — décommenter si disponible
+    # deploy:
+    #   resources:
+    #     reservations:
+    #       devices:
+    #         - driver: nvidia
+    #           count: 1
+    #           capabilities: [gpu]
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:11434/api/tags || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 15s
+    restart: unless-stopped
+
+  # ──────────────────────────────────────────────────────────
+  # Ollama Init — télécharge les modèles au premier démarrage
+  # ──────────────────────────────────────────────────────────
+  ollama-init:
+    image: ollama/ollama:latest
+    container_name: soc-ollama-init
+    volumes:
+      - ollama_data:/root/.ollama
+    networks:
+      - soc-net
+    environment:
+      - OLLAMA_HOST=http://ollama:11434
+    depends_on:
+      ollama:
+        condition: service_healthy
+    entrypoint: >
+      /bin/sh -c "
+        echo '>>> Pulling llama3 (~4.5 GB)...' &&
+        ollama pull llama3 &&
+        echo '>>> Pulling gemma2:2b (~1.5 GB)...' &&
+        ollama pull gemma2:2b &&
+        echo '>>> Pulling nomic-embed-text (~260 MB)...' &&
+        ollama pull nomic-embed-text &&
+        echo '>>> Tous les modèles sont prêts.'
+      "
+    restart: "no"
+
+  # ──────────────────────────────────────────────────────────
+  # Mini-SOC — Application Flask
+  # ──────────────────────────────────────────────────────────
+  mini-soc:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: soc-app
+    env_file: .env
+    environment:
+      - ES_HOST=http://elasticsearch:9200
+      - ES_USER=${ES_USER:-elastic}
+      - ES_PASSWORD=${ES_PASSWORD:-changeme}
+      - OLLAMA_URL=http://ollama:11434
+      - FLASK_SECRET=${FLASK_SECRET:-mini-soc-secret-change-en-prod-2026}
+      - ABUSEIPDB_KEY=${ABUSEIPDB_KEY:-}
+    volumes:
+      - rag_vectors:/app/rag/vectors
+      - soc_users:/app/users.json
+    ports:
+      - "5000:5000"
+    networks:
+      - soc-net
+    depends_on:
+      elasticsearch:
+        condition: service_healthy
+      ollama:
+        condition: service_healthy
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:5000/ || exit 1"]
+      interval: 20s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
+  # ──────────────────────────────────────────────────────────
+  # RAG Init — construit l'index vectoriel au premier démarrage
+  # ──────────────────────────────────────────────────────────
+  rag-init:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: soc-rag-init
+    env_file: .env
+    environment:
+      - OLLAMA_URL=http://ollama:11434
+    volumes:
+      - rag_vectors:/app/rag/vectors
+    networks:
+      - soc-net
+    depends_on:
+      ollama:
+        condition: service_healthy
+      mini-soc:
+        condition: service_healthy
+    entrypoint: >
+      /bin/sh -c "
+        echo '>>> Construction de l index RAG...' &&
+        cd /app/rag && python build_index.py &&
+        echo '>>> Index RAG prêt.'
+      "
+    restart: "no"
+
+# ──────────────────────────────────────────────────────────
+# Volumes persistants
+# ──────────────────────────────────────────────────────────
+volumes:
+  es_data:
+    driver: local
+  ollama_data:
+    driver: local
+  rag_vectors:
+    driver: local
+  soc_users:
+    driver: local
+
+# ──────────────────────────────────────────────────────────
+# Réseau interne
+# ──────────────────────────────────────────────────────────
+networks:
+  soc-net:
+    driver: bridge

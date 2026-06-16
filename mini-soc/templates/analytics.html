@@ -1,0 +1,230 @@
+{% extends "base.html" %}
+{% block title %}Analytics{% endblock %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+  <h5 class="mb-0"><i class="fas fa-chart-line me-2" style="color:var(--blue)"></i>Analytics — Vue SIEM</h5>
+  <span class="text-muted small" id="last-update">—</span>
+</div>
+
+<!-- KPIs -->
+<div class="row g-2 mb-4">
+  {% set kpis = [
+    ('kpi-risk',  'Risque global',    'var(--text)',   'fa-shield-alt'),
+    ('kpi-logs',  'Logs totaux',      'var(--blue)',   'fa-database'),
+    ('kpi-ssh',   'SSH Failed',       'var(--red)',    'fa-terminal'),
+    ('kpi-ids',   'IDS Alerts',       'var(--orange)', 'fa-exclamation-triangle'),
+    ('kpi-ia',    'Anomalies IA',     'var(--purple)', 'fa-brain'),
+    ('kpi-inc',   'Incidents ouverts','var(--yellow)', 'fa-ticket-alt'),
+  ] %}
+  {% for id, label, color, icon in kpis %}
+  <div class="col-6 col-md-2">
+    <div class="stat-card h-100">
+      <i class="fas {{ icon }}" style="color:{{ color }};font-size:1rem;margin-bottom:6px;display:block;"></i>
+      <div class="number" style="font-size:1.7rem;color:{{ color }};" id="{{ id }}">—</div>
+      <div class="label">{{ label }}</div>
+    </div>
+  </div>
+  {% endfor %}
+</div>
+
+<!-- Graphiques -->
+<div class="row g-3">
+  <div class="col-md-8">
+    <div class="card-section" style="margin-bottom:0;">
+      <div class="section-title"><i class="fas fa-chart-bar me-1"></i>Volume de logs — dernières 24h</div>
+      <canvas id="timelineChart" height="100"></canvas>
+    </div>
+  </div>
+  <div class="col-md-4">
+    <div class="card-section" style="margin-bottom:0;">
+      <div class="section-title"><i class="fas fa-brain me-1"></i>Anomalies IA — dernières 24h</div>
+      <canvas id="iaChart" height="160"></canvas>
+    </div>
+  </div>
+</div>
+
+<div class="row g-3 mt-1">
+  <div class="col-md-4">
+    <div class="card-section" style="margin-bottom:0;">
+      <div class="section-title"><i class="fas fa-skull-crossbones me-1" style="color:var(--red);"></i>Top 10 IPs attaquantes</div>
+      <canvas id="topIpsChart" height="180"></canvas>
+    </div>
+  </div>
+  <div class="col-md-4">
+    <div class="card-section" style="margin-bottom:0;">
+      <div class="section-title"><i class="fas fa-chart-pie me-1"></i>Répartition sévérité</div>
+      <canvas id="severityChart" height="180"></canvas>
+    </div>
+  </div>
+  <div class="col-md-4">
+    <div class="card-section d-flex flex-column justify-content-center align-items-center" style="min-height:220px;margin-bottom:0;">
+      <div class="section-title w-100 text-center"><i class="fas fa-bug me-1" style="color:var(--orange);"></i>CVE critiques</div>
+      <div style="font-size:3rem;font-weight:700;color:var(--red);line-height:1;" id="kpi-cve">—</div>
+      <div class="label mt-1">détectées</div>
+      <a href="/cve" class="btn-soc btn-soc-danger mt-3" style="font-size:0.75rem;">
+        <i class="fas fa-bug"></i>Voir les CVE
+      </a>
+    </div>
+  </div>
+</div>
+
+<!-- Model Drift Detection panel -->
+<div class="row g-3 mb-3">
+  <div class="col-12">
+    <div class="card-section" id="driftPanel">
+      <div class="d-flex align-items-center justify-content-between mb-2">
+        <div class="section-title" style="margin-bottom:0;"><i class="fas fa-exclamation-triangle me-1" style="color:var(--orange);"></i>Détection de dérive de modèle (NIST DE.CM)</div>
+        <button onclick="loadDrift()" class="btn-soc" style="font-size:0.75rem; padding:4px 10px;">
+          <i class="fas fa-sync-alt me-1"></i>Actualiser
+        </button>
+      </div>
+      <div id="driftContent" style="font-size:0.83rem; color:var(--muted);">Chargement…</div>
+      <canvas id="driftChart" height="60" style="margin-top:12px;"></canvas>
+    </div>
+  </div>
+</div>
+
+<script>
+let charts = {};
+
+function destroyChart(id) {
+  if (charts[id]) { charts[id].destroy(); delete charts[id]; }
+}
+
+const COLORS = {
+  critical: "#f85149", high: "#ffa657", medium: "#58a6ff",
+  low: "#3fb950", info: "#8b949e"
+};
+
+async function loadAnalytics() {
+  try {
+    const [overview, timeline, ia_tl, topIps, severity] = await Promise.all([
+      fetch("/api/analytics/overview").then(r => r.json()),
+      fetch("/api/logs/timeline").then(r => r.json()),
+      fetch("/api/ia/timeline").then(r => r.json()),
+      fetch("/api/logs/top_ips").then(r => r.json()),
+      fetch("/api/logs/severity_dist").then(r => r.json()),
+    ]);
+
+    // KPIs
+    const risk = overview.risk_score ?? 0;
+    const riskEl = document.getElementById("kpi-risk");
+    riskEl.textContent = risk + "/10";
+    riskEl.style.color = risk >= 7 ? "var(--red)" : risk >= 4 ? "var(--yellow)" : "var(--green)";
+    document.getElementById("kpi-logs").textContent = (overview.total_logs ?? 0).toLocaleString();
+    document.getElementById("kpi-ssh").textContent  = overview.ssh_failed ?? 0;
+    document.getElementById("kpi-ids").textContent  = overview.ids_alerts ?? 0;
+    document.getElementById("kpi-ia").textContent   = overview.anomalies ?? 0;
+    document.getElementById("kpi-inc").textContent  = overview.incidents_open ?? 0;
+    document.getElementById("kpi-cve").textContent  = overview.cve_count ?? 0;
+    document.getElementById("last-update").textContent =
+      "Mis à jour : " + new Date().toLocaleTimeString();
+
+    // Timeline logs
+    destroyChart("timeline");
+    charts["timeline"] = new Chart(document.getElementById("timelineChart"), {
+      type: "bar",
+      data: {
+        labels: timeline.map(d => d.time ? d.time.slice(11,16) : ""),
+        datasets: [{ label: "Logs / heure", data: timeline.map(d => d.count),
+                     backgroundColor: "rgba(88,166,255,0.6)", borderColor: "#58a6ff",
+                     borderWidth: 1 }]
+      },
+      options: {
+        plugins: { legend: { labels: { color: "#8b949e" } } },
+        scales: { x: { ticks: { color: "#8b949e" } }, y: { ticks: { color: "#8b949e" }, beginAtZero: true } }
+      }
+    });
+
+    // Timeline IA
+    destroyChart("ia");
+    charts["ia"] = new Chart(document.getElementById("iaChart"), {
+      type: "line",
+      data: {
+        labels: ia_tl.map(d => d.time ? d.time.slice(11,16) : ""),
+        datasets: [{ label: "Anomalies / heure", data: ia_tl.map(d => d.count),
+                     borderColor: "#ffa657", backgroundColor: "rgba(255,166,87,0.15)",
+                     fill: true, tension: 0.3 }]
+      },
+      options: {
+        plugins: { legend: { labels: { color: "#8b949e" } } },
+        scales: { x: { ticks: { color: "#8b949e" } }, y: { ticks: { color: "#8b949e" }, beginAtZero: true } }
+      }
+    });
+
+    // Top IPs
+    destroyChart("topips");
+    charts["topips"] = new Chart(document.getElementById("topIpsChart"), {
+      type: "bar",
+      data: {
+        labels: topIps.map(d => d.ip),
+        datasets: [{ label: "Requêtes", data: topIps.map(d => d.count),
+                     backgroundColor: "rgba(248,81,73,0.7)" }]
+      },
+      options: {
+        indexAxis: "y",
+        plugins: { legend: { labels: { color: "#8b949e" } } },
+        scales: { x: { ticks: { color: "#8b949e" } }, y: { ticks: { color: "#8b949e", font: { size: 10 } } } }
+      }
+    });
+
+    // Sévérité donut
+    destroyChart("severity");
+    const sevKeys = Object.keys(severity);
+    charts["severity"] = new Chart(document.getElementById("severityChart"), {
+      type: "doughnut",
+      data: {
+        labels: sevKeys,
+        datasets: [{ data: sevKeys.map(k => severity[k]),
+                     backgroundColor: sevKeys.map(k => COLORS[k] || "#8b949e") }]
+      },
+      options: {
+        plugins: { legend: { labels: { color: "#8b949e" }, position: "bottom" } }
+      }
+    });
+
+  } catch (e) {
+    console.error("Analytics error:", e);
+  }
+}
+
+loadAnalytics();
+setInterval(loadAnalytics, 30000);
+
+async function loadDrift() {
+  try {
+    const d = await fetch('/api/model_drift').then(r => r.json());
+    if (d.error) { document.getElementById('driftContent').textContent = 'Erreur: ' + d.error; return; }
+    const alertColor = d.drift_alert ? 'var(--red)' : 'var(--green)';
+    document.getElementById('driftContent').innerHTML = `
+      <div class="d-flex gap-4 flex-wrap align-items-center">
+        <div><span style="color:var(--muted);font-size:0.75rem;">Score moyen cette semaine</span><br>
+          <span style="font-size:1.2rem;font-weight:700;color:var(--blue);">${d.this_week_avg}</span></div>
+        <div><span style="color:var(--muted);font-size:0.75rem;">Score moyen semaine précédente</span><br>
+          <span style="font-size:1.2rem;font-weight:700;color:var(--text);">${d.last_week_avg}</span></div>
+        <div><span style="color:var(--muted);font-size:0.75rem;">Variation</span><br>
+          <span style="font-size:1.2rem;font-weight:700;color:${alertColor};">${d.pct_change > 0 ? '+' : ''}${d.pct_change}%</span></div>
+        <div style="flex:1; min-width:200px;">
+          <div style="padding:8px 14px;border-radius:8px;background:${d.drift_alert ? 'rgba(248,81,73,0.1)' : 'rgba(63,185,80,0.08)'};border:1px solid ${alertColor};font-size:0.82rem;color:${alertColor};">
+            ${d.message}</div></div>
+      </div>`;
+    if (d.trend && d.trend.length) {
+      destroyChart('driftChart');
+      charts['driftChart'] = new Chart(document.getElementById('driftChart'), {
+        type: 'bar',
+        data: {
+          labels: d.trend.map(t => t.date.slice(5)),
+          datasets: [{ label: 'Anomalies/jour', data: d.trend.map(t => t.count),
+            backgroundColor: d.drift_alert ? 'rgba(248,81,73,0.5)' : 'rgba(88,166,255,0.5)',
+            borderColor:     d.drift_alert ? '#f85149' : '#58a6ff', borderWidth:1 }]
+        },
+        options: { plugins:{legend:{display:false}}, scales:{y:{beginAtZero:true,ticks:{color:'#8b949e'},grid:{color:'rgba(255,255,255,0.05)'}},x:{ticks:{color:'#8b949e'},grid:{display:false}}}}
+      });
+    }
+  } catch(e) {
+    document.getElementById('driftContent').textContent = 'Service temporairement indisponible.';
+  }
+}
+loadDrift();
+</script>
+{% endblock %}

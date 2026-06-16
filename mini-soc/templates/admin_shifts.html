@@ -1,0 +1,236 @@
+{% extends "base.html" %}
+{% block title %}Gestion des Shifts{% endblock %}
+{% block content %}
+<style>
+  .shift-card {
+    background: var(--bg2); border: 1px solid var(--border); border-radius: 12px;
+    padding: 18px 20px; position: relative; transition: border-color .2s;
+  }
+  .shift-card.active-shift { border-color: rgba(63,185,80,0.5); box-shadow: 0 0 0 1px rgba(63,185,80,0.2); }
+  .member-pill {
+    display:inline-flex; align-items:center; gap:5px; background:var(--bg3);
+    border:1px solid var(--border); border-radius:20px; padding:3px 10px;
+    font-size:0.73rem; color:var(--text);
+  }
+  .member-pill button { background:none; border:none; color:var(--muted); cursor:pointer; padding:0 0 0 4px; font-size:0.8rem; }
+  .member-pill button:hover { color:var(--red); }
+  .history-row { font-size:0.72rem; padding:4px 0; border-bottom:1px solid var(--border); display:flex; gap:12px; }
+  .form-ctrl { background:var(--bg3); border:1px solid var(--border); color:var(--text); border-radius:6px; padding:6px 10px; font-size:0.82rem; width:100%; }
+  .form-ctrl:focus { outline:none; border-color:var(--blue); }
+</style>
+
+<div class="d-flex justify-content-between align-items-center mb-3">
+  <div>
+    <h5 style="color:var(--text);margin:0;font-weight:700;">
+      <i class="fas fa-users-cog me-2" style="color:var(--orange);"></i>Gestion des Shifts SOC
+    </h5>
+    <div style="font-size:0.72rem;color:var(--muted);margin-top:2px;">Équipes, rotations et assignments — L3 only</div>
+  </div>
+  <button onclick="document.getElementById('modalNewShift').classList.add('open')" class="btn-soc btn-soc-primary">
+    <i class="fas fa-plus me-1"></i>Nouveau shift
+  </button>
+</div>
+
+<!-- Current shift banner -->
+{% if current_shift %}
+<div style="background:rgba(63,185,80,0.08);border:1px solid rgba(63,185,80,0.3);border-radius:8px;padding:12px 18px;margin-bottom:18px;display:flex;align-items:center;gap:12px;">
+  <span class="live-dot" style="width:8px;height:8px;flex-shrink:0;"></span>
+  <div>
+    <span style="font-weight:700;color:var(--green);">Shift actif : {{ current_shift.name }}</span>
+    <span style="color:var(--muted);font-size:0.78rem;margin-left:10px;">{{ current_shift.start }} – {{ current_shift.end }}</span>
+    <span style="color:var(--muted);font-size:0.78rem;margin-left:10px;">
+      {{ current_shift.members|length }} analyste(s) :
+      <strong style="color:var(--text);">{{ current_shift.members|join(', ') or 'Aucun assigné' }}</strong>
+    </span>
+  </div>
+</div>
+{% endif %}
+
+<!-- Shift cards -->
+<div class="row g-3 mb-4">
+  {% for shift in shifts %}
+  {% set color_map = {'blue':'var(--blue)','orange':'var(--orange)','purple':'var(--purple)','green':'var(--green)','red':'var(--red)','yellow':'var(--yellow)'} %}
+  {% set c = color_map.get(shift.color, 'var(--blue)') %}
+  {% set is_active = (current_shift and current_shift.name == shift.name) %}
+  <div class="col-md-4">
+    <div class="shift-card {% if is_active %}active-shift{% endif %}">
+      {% if is_active %}
+      <span style="position:absolute;top:12px;right:14px;font-size:0.65rem;color:var(--green);font-weight:700;text-transform:uppercase;letter-spacing:1px;">
+        <span class="live-dot" style="width:5px;height:5px;"></span> Actif
+      </span>
+      {% endif %}
+
+      <!-- Header -->
+      <div class="d-flex align-items-center gap-10px mb-3">
+        <div style="width:36px;height:36px;background:{{ c }}22;border-radius:8px;display:flex;align-items:center;justify-content:center;flex-shrink:0;margin-right:10px;">
+          <i class="fas {{ shift.icon }}" style="color:{{ c }};font-size:1rem;"></i>
+        </div>
+        <div>
+          <div style="font-weight:700;color:{{ c }};font-size:0.95rem;">{{ shift.name }}</div>
+          <div style="font-size:0.7rem;color:var(--muted);">{{ shift.start }} – {{ shift.end }}</div>
+        </div>
+      </div>
+
+      {% if shift.description %}
+      <div style="font-size:0.75rem;color:var(--muted);margin-bottom:12px;">{{ shift.description }}</div>
+      {% endif %}
+
+      <!-- Members -->
+      <div style="font-size:0.7rem;color:var(--muted);text-transform:uppercase;letter-spacing:1px;margin-bottom:6px;">
+        <i class="fas fa-users me-1"></i>Membres ({{ shift.members|length }})
+      </div>
+      <div id="members-{{ loop.index }}" style="display:flex;flex-wrap:wrap;gap:4px;min-height:26px;margin-bottom:12px;">
+        {% for m in shift.members %}
+        <span class="member-pill">
+          <i class="fas fa-user" style="font-size:0.6rem;color:var(--muted);"></i>{{ m }}
+          <button onclick="removeMember('{{ shift.name }}', '{{ m }}')" title="Retirer">×</button>
+        </span>
+        {% endfor %}
+        {% if not shift.members %}
+        <span style="font-size:0.72rem;color:var(--muted);font-style:italic;">Aucun analyste assigné</span>
+        {% endif %}
+      </div>
+
+      <!-- Assign -->
+      <div class="d-flex gap-2">
+        <select id="sel-{{ loop.index }}" class="form-ctrl" style="flex:1;font-size:0.78rem;padding:4px 8px;">
+          <option value="">— Assigner un analyste —</option>
+          {% for u in users %}
+          {% if u.name not in shift.members %}
+          <option value="{{ u.name }}">{{ u.name }} ({{ u.level }})</option>
+          {% endif %}
+          {% endfor %}
+        </select>
+        <button onclick="addMember('{{ shift.name }}', document.getElementById('sel-{{ loop.index }}').value)"
+                class="btn-soc btn-soc-primary" style="font-size:0.75rem;padding:4px 10px;white-space:nowrap;">
+          <i class="fas fa-plus"></i>
+        </button>
+      </div>
+
+      <!-- Delete -->
+      <div class="mt-2 text-end">
+        <button onclick="deleteShift('{{ shift.name }}')" class="btn-soc" style="font-size:0.7rem;padding:2px 8px;color:var(--red);border-color:rgba(248,81,73,0.3);">
+          <i class="fas fa-trash me-1"></i>Supprimer
+        </button>
+      </div>
+    </div>
+  </div>
+  {% endfor %}
+</div>
+
+<!-- Shift history -->
+{% if history %}
+<div class="card-section" style="padding:16px 20px;">
+  <div class="section-title mb-3"><i class="fas fa-history me-2"></i>Historique des assignments</div>
+  {% for h in history|reverse %}
+  <div class="history-row">
+    <span style="color:var(--muted);">{{ h.ts[:16]|replace('T',' ') }}</span>
+    <span style="color:var(--blue);">{{ h.shift }}</span>
+    <span style="color:{% if h.action=='add' %}var(--green){% else %}var(--red){% endif %};">
+      {{ '+' if h.action=='add' else '−' }} {{ h.username }}
+    </span>
+    <span style="color:var(--muted);">par {{ h.by }}</span>
+  </div>
+  {% endfor %}
+</div>
+{% endif %}
+
+<!-- Modal Nouveau shift -->
+<div class="modal-overlay" id="modalNewShift">
+  <div class="modal-box" style="width:420px;">
+    <div class="d-flex justify-content-between align-items-center mb-3">
+      <h6 style="color:var(--orange);margin:0;"><i class="fas fa-plus me-2"></i>Nouveau shift</h6>
+      <button onclick="document.getElementById('modalNewShift').classList.remove('open')"
+              style="background:none;border:none;color:var(--muted);font-size:1.2rem;cursor:pointer;">×</button>
+    </div>
+    <div class="row g-2 mb-2">
+      <div class="col-8">
+        <label style="font-size:0.73rem;color:var(--muted);">Nom *</label>
+        <input type="text" id="new-name" class="form-ctrl mt-1" placeholder="ex: Weekend">
+      </div>
+      <div class="col-4">
+        <label style="font-size:0.73rem;color:var(--muted);">Couleur</label>
+        <select id="new-color" class="form-ctrl mt-1">
+          <option value="blue">Blue</option>
+          <option value="orange">Orange</option>
+          <option value="purple">Purple</option>
+          <option value="green">Green</option>
+          <option value="red">Red</option>
+          <option value="yellow">Yellow</option>
+        </select>
+      </div>
+    </div>
+    <div class="row g-2 mb-2">
+      <div class="col-6">
+        <label style="font-size:0.73rem;color:var(--muted);">Début</label>
+        <input type="time" id="new-start" class="form-ctrl mt-1" value="08:00">
+      </div>
+      <div class="col-6">
+        <label style="font-size:0.73rem;color:var(--muted);">Fin</label>
+        <input type="time" id="new-end" class="form-ctrl mt-1" value="16:00">
+      </div>
+    </div>
+    <div class="mb-3">
+      <label style="font-size:0.73rem;color:var(--muted);">Description</label>
+      <input type="text" id="new-desc" class="form-ctrl mt-1" placeholder="Description du shift…">
+    </div>
+    <div class="d-flex gap-2 justify-content-end">
+      <button onclick="document.getElementById('modalNewShift').classList.remove('open')" class="btn-soc">Annuler</button>
+      <button onclick="createShift()" class="btn-soc btn-soc-primary">Créer</button>
+    </div>
+  </div>
+</div>
+
+<style>
+  .modal-overlay { display:none;position:fixed;inset:0;background:rgba(0,0,0,0.7);z-index:1000;align-items:center;justify-content:center; }
+  .modal-overlay.open { display:flex; }
+  .modal-box { background:var(--bg2);border:1px solid var(--border);border-radius:12px;padding:28px;max-width:95vw; }
+</style>
+
+<script>
+async function addMember(shift, username) {
+  if (!username) { alert('Sélectionnez un analyste.'); return; }
+  const r = await fetch(`/api/shifts/${encodeURIComponent(shift)}/assign`, {
+    method: 'POST', headers: {'Content-Type':'application/json'},
+    body: JSON.stringify({username, action:'add'})
+  });
+  if (r.ok) location.reload();
+  else { const d = await r.json(); alert('Erreur: ' + (d.error||'?')); }
+}
+
+async function removeMember(shift, username) {
+  if (!confirm(`Retirer ${username} du shift ${shift} ?`)) return;
+  const r = await fetch(`/api/shifts/${encodeURIComponent(shift)}/assign`, {
+    method: 'POST', headers: {'Content-Type':'application/json'},
+    body: JSON.stringify({username, action:'remove'})
+  });
+  if (r.ok) location.reload();
+}
+
+async function createShift() {
+  const name  = document.getElementById('new-name').value.trim();
+  const color = document.getElementById('new-color').value;
+  const start = document.getElementById('new-start').value;
+  const end   = document.getElementById('new-end').value;
+  const desc  = document.getElementById('new-desc').value.trim();
+  if (!name) { alert('Le nom est requis.'); return; }
+  const r = await fetch('/api/shifts', {
+    method: 'POST', headers: {'Content-Type':'application/json'},
+    body: JSON.stringify({name, color, start, end, description: desc,
+                          icon: 'fa-clock'})
+  });
+  if (r.ok) location.reload();
+  else { const d = await r.json(); alert('Erreur: ' + (d.error||'?')); }
+}
+
+async function deleteShift(name) {
+  if (!confirm(`Supprimer le shift "${name}" ?`)) return;
+  const r = await fetch(`/api/shifts/${encodeURIComponent(name)}`, {method:'DELETE'});
+  if (r.ok) location.reload();
+}
+
+document.querySelectorAll('.modal-overlay').forEach(m => {
+  m.addEventListener('click', e => { if (e.target === m) m.classList.remove('open'); });
+});
+</script>
+{% endblock %}

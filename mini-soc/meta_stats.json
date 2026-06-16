@@ -1,0 +1,39 @@
+{
+  "computed_at": "2026-06-07T13:18:30.408621+00:00",
+  "n_samples": 153,
+  "models": {
+    "IF": {
+      "precision": 0.857,
+      "recall": 0.98,
+      "f1": 0.914
+    },
+    "RF": {
+      "precision": 0.73,
+      "recall": 0.827,
+      "f1": 0.775
+    },
+    "DL": {
+      "precision": 0.606,
+      "recall": 0.612,
+      "f1": 0.609
+    },
+    "Rate": {
+      "precision": 0.653,
+      "recall": 0.48,
+      "f1": 0.553
+    },
+    "Meta": {
+      "precision": 1.0,
+      "recall": 1.0,
+      "f1": 0.989
+    }
+  },
+  "dynamic_weights": {
+    "w_if": 0.321,
+    "w_rf": 0.272,
+    "w_dl": 0.214,
+    "w_rate": 0.194
+  },
+  "meta_f1": 0.989,
+  "model_path": "/home/arthur-leywin/Documents/project-pfa/mini-soc/meta_model.pkl"
+}

@@ -1,0 +1,521 @@
+{% extends "base.html" %}
+{% block title %}Dashboard{% endblock %}
+{% block content %}
+<style>
+  .stat-card-home {
+    background: var(--bg2); border: 1px solid var(--border);
+    border-radius: 10px; padding: 14px 18px;
+    display: flex; align-items: center; gap: 14px;
+    transition: border-color .15s, transform .15s;
+    cursor: default;
+  }
+  .stat-card-home:hover { border-color: rgba(88,166,255,0.4); transform: translateY(-1px); }
+  .stat-card-home .icon-box {
+    width: 38px; height: 38px; border-radius: 10px; flex-shrink: 0;
+    display: flex; align-items: center; justify-content: center; font-size: 0.95rem;
+  }
+  .stat-card-home .val { font-size: 1.55rem; font-weight: 700; line-height: 1; }
+  .stat-card-home .lbl { font-size: 0.68rem; color: var(--muted); text-transform: uppercase; letter-spacing: 1px; margin-top: 2px; }
+</style>
+
+<!-- Score de risque global -->
+<div class="card-section mb-3" style="border-left:4px solid {{ risk_color }}; padding:14px 20px;">
+  <div class="d-flex align-items-center justify-content-between flex-wrap gap-3">
+    <div>
+      <div class="section-title mb-1"><i class="fas fa-shield-alt me-2"></i>Score de risque global</div>
+      <div style="font-size:0.78rem;color:var(--muted);">SSH failed ×30% + Anomalies IA ×40% + CVE critiques ×30%</div>
+    </div>
+    <div class="text-center" style="min-width:110px;">
+      <div id="risk-number" style="font-size:2.8rem;font-weight:700;color:{{ risk_color }};line-height:1;">
+        {{ risk_score }}<span style="font-size:1.1rem;color:var(--muted);">/10</span>
+      </div>
+      <div id="risk-level" style="font-size:0.82rem;font-weight:600;color:{{ risk_color }};letter-spacing:1px;">{{ risk_level }}</div>
+    </div>
+    <div style="flex:1;min-width:160px;max-width:280px;">
+      <div style="background:var(--bg3);border-radius:8px;height:12px;overflow:hidden;border:1px solid var(--border);">
+        <div id="risk-bar" style="height:100%;width:{{ (risk_score/10*100)|int }}%;background:{{ risk_color }};border-radius:8px;transition:width .5s;"></div>
+      </div>
+      <div class="d-flex justify-content-between mt-1" style="font-size:0.68rem;color:var(--muted);">
+        <span>0 Faible</span><span>5 Modéré</span><span>10 Critique</span>
+      </div>
+    </div>
+    <div class="d-flex gap-2">
+      <a href="/report/html" target="_blank" class="btn-soc btn-soc-primary" style="white-space:nowrap;">
+        <i class="fas fa-file-alt"></i>Rapport HTML
+      </a>
+      <a href="/incidents" class="btn-soc" style="white-space:nowrap;">
+        <i class="fas fa-ticket-alt" style="color:var(--red);"></i>Incidents
+      </a>
+    </div>
+  </div>
+</div>
+
+<!-- Stats row -->
+<div class="row g-2 mb-3">
+  <div class="col-6 col-md-4 col-lg-2">
+    <div class="stat-card-home">
+      <div class="icon-box" style="background:rgba(88,166,255,0.12);color:var(--blue);"><i class="fas fa-database"></i></div>
+      <div>
+        <div class="val" style="color:var(--blue);" id="st-logs">{{ total_logs }}</div>
+        <div class="lbl">Logs indexés</div>
+      </div>
+    </div>
+  </div>
+  <div class="col-6 col-md-4 col-lg-2" onclick="document.getElementById('ssh-section').scrollIntoView({behavior:'smooth'})" style="cursor:pointer;">
+    <div class="stat-card-home" style="border-color:rgba(248,81,73,0.25);">
+      <div class="icon-box" style="background:rgba(248,81,73,0.12);color:var(--red);"><i class="fas fa-terminal"></i></div>
+      <div>
+        <div class="val" style="color:var(--red);" id="st-ssh">{{ ssh_failed }}</div>
+        <div class="lbl">SSH Failed</div>
+      </div>
+    </div>
+  </div>
+  <div class="col-6 col-md-4 col-lg-2">
+    <div class="stat-card-home">
+      <div class="icon-box" style="background:rgba(210,168,255,0.12);color:var(--purple);"><i class="fas fa-brain"></i></div>
+      <div>
+        <div class="val" style="color:var(--purple);" id="st-ia">{{ total_anomalies }}</div>
+        <div class="lbl">Anomalies IA</div>
+      </div>
+    </div>
+  </div>
+  <div class="col-6 col-md-4 col-lg-2">
+    <div class="stat-card-home">
+      <div class="icon-box" style="background:rgba(227,179,65,0.12);color:var(--yellow);"><i class="fas fa-bug"></i></div>
+      <div>
+        <div class="val" style="color:var(--yellow);" id="st-cve">{{ total_cve }}</div>
+        <div class="lbl">CVE critiques</div>
+      </div>
+    </div>
+  </div>
+  <div class="col-6 col-md-4 col-lg-2">
+    <div class="stat-card-home">
+      <div class="icon-box" style="background:rgba(255,166,87,0.12);color:var(--orange);"><i class="fas fa-ticket-alt"></i></div>
+      <div>
+        <div class="val" style="color:var(--orange);" id="st-inc">—</div>
+        <div class="lbl">Incidents ouverts</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- SSH Failed section -->
+<div class="card-section mb-3" id="ssh-section" style="border-left:4px solid var(--red);">
+  <div class="d-flex align-items-center justify-content-between mb-3 flex-wrap gap-2">
+    <div>
+      <div class="section-title mb-0"><i class="fas fa-terminal me-1" style="color:var(--red);"></i>SSH Failed — Analyse en temps réel</div>
+      <div style="font-size:0.72rem;color:var(--muted);" id="ssh-rate-line">Chargement…</div>
+    </div>
+    <div class="d-flex gap-3">
+      <div class="text-center">
+        <div style="font-size:1.5rem;font-weight:700;color:var(--red);" id="ssh-total">—</div>
+        <div style="font-size:0.65rem;color:var(--muted);text-transform:uppercase;letter-spacing:1px;">Total</div>
+      </div>
+      <div class="text-center">
+        <div style="font-size:1.5rem;font-weight:700;color:var(--orange);" id="ssh-1h">—</div>
+        <div style="font-size:0.65rem;color:var(--muted);text-transform:uppercase;letter-spacing:1px;">1 heure</div>
+      </div>
+      <div class="text-center">
+        <div style="font-size:1.5rem;font-weight:700;color:var(--yellow);" id="ssh-rate">—</div>
+        <div style="font-size:0.65rem;color:var(--muted);text-transform:uppercase;letter-spacing:1px;">/min</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="row g-3">
+    <!-- Top IPs attaquantes -->
+    <div class="col-md-4">
+      <div style="font-size:0.72rem;text-transform:uppercase;letter-spacing:1px;color:var(--muted);margin-bottom:8px;">
+        <i class="fas fa-skull-crossbones me-1" style="color:var(--red);"></i>Top IPs attaquantes (24h)
+      </div>
+      <div id="ssh-top-ips">
+        <div style="text-align:center;color:var(--muted);padding:20px;font-size:0.78rem;"><i class="fas fa-spinner fa-spin"></i></div>
+      </div>
+    </div>
+
+    <!-- Top usernames -->
+    <div class="col-md-4">
+      <div style="font-size:0.72rem;text-transform:uppercase;letter-spacing:1px;color:var(--muted);margin-bottom:8px;">
+        <i class="fas fa-user-secret me-1" style="color:var(--orange);"></i>Usernames tentés (24h)
+      </div>
+      <div id="ssh-top-users">
+        <div style="text-align:center;color:var(--muted);padding:20px;font-size:0.78rem;"><i class="fas fa-spinner fa-spin"></i></div>
+      </div>
+    </div>
+
+    <!-- Timeline sparkline -->
+    <div class="col-md-4">
+      <div style="font-size:0.72rem;text-transform:uppercase;letter-spacing:1px;color:var(--muted);margin-bottom:8px;">
+        <i class="fas fa-chart-line me-1" style="color:var(--blue);"></i>Volume par 5min (1h)
+      </div>
+      <canvas id="ssh-chart" height="90"></canvas>
+    </div>
+  </div>
+
+  <!-- Logs récents SSH failed -->
+  <div class="mt-3">
+    <div style="font-size:0.72rem;text-transform:uppercase;letter-spacing:1px;color:var(--muted);margin-bottom:8px;">
+      <i class="fas fa-stream me-1" style="color:var(--red);"></i>Logs récents (30 dernières minutes)
+      <span id="ssh-live-badge" style="display:inline-block;background:rgba(248,81,73,0.15);color:var(--red);border:1px solid var(--red);border-radius:10px;font-size:0.62rem;padding:1px 7px;margin-left:6px;">
+        <span class="live-dot me-1" style="width:5px;height:5px;"></span>LIVE
+      </span>
+    </div>
+    <div class="table-responsive">
+      <table class="table soc-table mb-0" style="font-size:0.78rem;">
+        <thead>
+          <tr>
+            <th style="width:140px;">Horodatage</th>
+            <th style="width:130px;">IP Source</th>
+            <th style="width:100px;">Utilisateur</th>
+            <th>Message</th>
+          </tr>
+        </thead>
+        <tbody id="ssh-logs-tbody">
+          <tr><td colspan="4" style="text-align:center;color:var(--muted);padding:20px;">
+            <i class="fas fa-spinner fa-spin"></i> Chargement…
+          </td></tr>
+        </tbody>
+      </table>
+    </div>
+    <div style="text-align:right;margin-top:6px;">
+      <a href="/logs" style="font-size:0.72rem;color:var(--blue);text-decoration:none;">
+        voir tous les logs → <i class="fas fa-external-link-alt" style="font-size:0.6rem;"></i>
+      </a>
+    </div>
+  </div>
+</div>
+
+<!-- Derniers incidents critiques -->
+<div class="card-section mb-3" style="border-left:4px solid var(--red);">
+  <div class="d-flex align-items-center justify-content-between mb-3">
+    <div class="section-title mb-0">
+      <i class="fas fa-fire me-1" style="color:var(--red);"></i>Derniers incidents critiques
+    </div>
+    <a href="/incidents?severity=critical" style="font-size:0.72rem;color:var(--blue);text-decoration:none;">
+      voir tous → <i class="fas fa-external-link-alt" style="font-size:0.6rem;"></i>
+    </a>
+  </div>
+  <div class="table-responsive">
+    <table class="table soc-table mb-0" style="font-size:0.75rem;">
+      <thead>
+        <tr>
+          <th>Titre</th><th>Sév.</th><th>IP source</th><th>Type</th>
+          <th>Score</th><th>Statut</th><th>Créé le</th><th></th>
+        </tr>
+      </thead>
+      <tbody id="crit-incidents-tbody">
+        <tr><td colspan="8" class="empty-state"><i class="fas fa-spinner fa-spin"></i> Chargement…</td></tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<script>
+const RISK_COLORS = {"CRITIQUE":"var(--red)","ÉLEVÉ":"var(--orange)","MODÉRÉ":"var(--yellow)","FAIBLE":"var(--green)"};
+let sshChart = null;
+
+// ── SSH Failed ────────────────────────────────────────────────────────────────
+async function refreshSSH() {
+  try {
+    const d = await fetch('/api/ssh/details').then(r => r.json());
+
+    // Compteurs
+    document.getElementById('ssh-total').textContent = (d.total||0).toLocaleString();
+    document.getElementById('ssh-1h').textContent    = (d.last_1h||0).toLocaleString();
+    document.getElementById('ssh-rate').textContent  = d.rate_per_min ?? '0';
+    document.getElementById('st-ssh').textContent    = (d.total||0).toLocaleString();
+    document.getElementById('ssh-rate-line').textContent =
+      `${d.last_10m||0} tentatives sur les 10 dernières minutes · ${d.rate_per_min??0}/min · ${(d.last_1h||0).toLocaleString()} sur 1h`;
+
+    // Top IPs
+    const maxIp = d.top_ips.length ? d.top_ips[0].count : 1;
+    document.getElementById('ssh-top-ips').innerHTML = d.top_ips.length
+      ? d.top_ips.map(x => `
+        <div style="margin-bottom:5px;">
+          <div style="display:flex;justify-content:space-between;font-size:0.72rem;margin-bottom:2px;">
+            <span style="font-family:monospace;color:var(--text);">${esc(x.ip)}</span>
+            <span style="color:var(--red);font-weight:600;">${x.count.toLocaleString()}</span>
+          </div>
+          <div style="height:5px;background:var(--bg3);border-radius:3px;overflow:hidden;">
+            <div style="height:100%;background:var(--red);width:${Math.round(x.count/maxIp*100)}%;border-radius:3px;"></div>
+          </div>
+        </div>`).join('')
+      : '<div style="color:var(--muted);font-size:0.75rem;">Aucune IP détectée</div>';
+
+    // Top users
+    const maxU = d.top_users.length ? d.top_users[0].count : 1;
+    document.getElementById('ssh-top-users').innerHTML = d.top_users.length
+      ? d.top_users.map(x => `
+        <div style="margin-bottom:5px;">
+          <div style="display:flex;justify-content:space-between;font-size:0.72rem;margin-bottom:2px;">
+            <span style="color:var(--text);">${esc(x.user||'(vide)')}</span>
+            <span style="color:var(--orange);font-weight:600;">${x.count.toLocaleString()}</span>
+          </div>
+          <div style="height:5px;background:var(--bg3);border-radius:3px;overflow:hidden;">
+            <div style="height:100%;background:var(--orange);width:${Math.round(x.count/maxU*100)}%;border-radius:3px;"></div>
+          </div>
+        </div>`).join('')
+      : '<div style="color:var(--muted);font-size:0.75rem;">Aucun user détecté</div>';
+
+    // Timeline chart
+    if (d.timeline && d.timeline.length) {
+      const labels = d.timeline.map(t => t.ts.slice(11,16));
+      const data   = d.timeline.map(t => t.count);
+      const ctx    = document.getElementById('ssh-chart').getContext('2d');
+      if (sshChart) {
+        sshChart.data.labels = labels;
+        sshChart.data.datasets[0].data = data;
+        sshChart.update('none');
+      } else {
+        sshChart = new Chart(ctx, {
+          type: 'bar',
+          data: {
+            labels,
+            datasets: [{
+              data,
+              backgroundColor: 'rgba(248,81,73,0.4)',
+              borderColor: 'rgba(248,81,73,0.8)',
+              borderWidth: 1,
+              borderRadius: 2,
+            }]
+          },
+          options: {
+            responsive: true, maintainAspectRatio: false,
+            plugins: {legend:{display:false},tooltip:{callbacks:{label:ctx=>`${ctx.parsed.y} tentatives`}}},
+            scales: {
+              x: {ticks:{color:'#8b949e',font:{size:9}},grid:{color:'rgba(48,54,61,0.5)'}},
+              y: {ticks:{color:'#8b949e',font:{size:9}},grid:{color:'rgba(48,54,61,0.5)'},beginAtZero:true}
+            }
+          }
+        });
+      }
+    }
+
+    // Logs récents
+    const tbody = document.getElementById('ssh-logs-tbody');
+    if (!d.recent || !d.recent.length) {
+      tbody.innerHTML = '<tr><td colspan="4" style="text-align:center;color:var(--muted);padding:16px;font-size:0.78rem;">Aucun log SSH failed dans les 30 dernières minutes</td></tr>';
+    } else {
+      tbody.innerHTML = d.recent.map(l => `
+        <tr>
+          <td style="font-family:monospace;color:var(--muted);white-space:nowrap;">${esc(l.ts)}</td>
+          <td><span style="font-family:monospace;font-size:0.75rem;color:var(--red);">${esc(l.ip||'—')}</span></td>
+          <td><span style="background:rgba(255,166,87,0.12);color:var(--orange);border-radius:4px;padding:1px 6px;font-size:0.72rem;">${esc(l.user||'?')}</span></td>
+          <td style="color:var(--muted);font-size:0.72rem;font-family:monospace;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:300px;" title="${esc(l.msg)}">${esc(l.msg)}</td>
+        </tr>`).join('');
+    }
+  } catch(e) { console.error('SSH refresh error', e); }
+}
+
+// ── Stats overview ────────────────────────────────────────────────────────────
+async function refreshStats() {
+  try {
+    const ov = await fetch('/api/analytics/overview').then(r => r.json());
+    document.getElementById('st-logs').textContent = (ov.total_logs||0).toLocaleString();
+    document.getElementById('st-ia').textContent   = (ov.anomalies||0).toLocaleString();
+    document.getElementById('st-cve').textContent  = ov.cve_count || 0;
+    document.getElementById('st-inc').textContent  = ov.incidents_open || 0;
+    const risk  = ov.risk_score ?? 0;
+    const level = risk >= 7 ? 'CRITIQUE' : risk >= 4 ? 'ÉLEVÉ' : risk >= 2 ? 'MODÉRÉ' : 'FAIBLE';
+    const color = RISK_COLORS[level];
+    const numEl = document.getElementById('risk-number');
+    const barEl = document.getElementById('risk-bar');
+    const lvlEl = document.getElementById('risk-level');
+    if (numEl) { numEl.innerHTML = risk + '<span style="font-size:1.1rem;color:var(--muted);">/10</span>'; numEl.style.color = color; }
+    if (barEl) { barEl.style.width = (risk/10*100)+'%'; barEl.style.background = color; }
+    if (lvlEl) { lvlEl.textContent = level; lvlEl.style.color = color; }
+  } catch(e) {}
+}
+
+function esc(s) { const d=document.createElement('div'); d.textContent=String(s||''); return d.innerHTML; }
+
+// ── Incidents critiques ───────────────────────────────────────────────────────
+async function loadCriticalIncidents() {
+  const tbody = document.getElementById('crit-incidents-tbody');
+  if (!tbody) return;
+  const SEV = {critical:'#FF4757',high:'#FF6B35',medium:'#FFD700',low:'#9FEF00'};
+  const STA = {open:'Ouvert',in_progress:'En cours',closed:'Fermé',investigating:'Analyse'};
+  try {
+    const d = await fetch('/api/priority_queue').then(r => r.json());
+    const items = (d.incidents || []).filter(i => i.severity === 'critical' || i.severity === 'high').slice(0, 8);
+    if (!items.length) {
+      tbody.innerHTML = '<tr><td colspan="8" class="empty-state" style="color:var(--green);"><i class="fas fa-check-circle me-1"></i>Aucun incident critique actif</td></tr>';
+      return;
+    }
+    tbody.innerHTML = items.map(inc => {
+      const c = SEV[inc.severity] || '#4B5875';
+      const st = STA[inc.status] || inc.status || '—';
+      const stCol = inc.status==='closed'?'var(--muted)':inc.status==='in_progress'?'var(--yellow)':'var(--red)';
+      const dt = (inc.created_at||'').slice(0,16).replace('T',' ');
+      return `<tr>
+        <td style="max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:600;color:var(--text2);">${esc(inc.title||'—')}</td>
+        <td><span style="color:${c};font-weight:700;font-size:0.72rem;">${(inc.severity||'').toUpperCase()}</span></td>
+        <td><code style="color:var(--cyan);font-size:0.72rem;">${esc(inc.src_ip||'—')}</code></td>
+        <td><span class="type-mono" style="font-size:0.7rem;">${esc(inc.type||'—')}</span></td>
+        <td><span style="color:var(--yellow);font-family:'JetBrains Mono',monospace;">${inc.score!=null?parseFloat(inc.score).toFixed(2):'—'}</span></td>
+        <td><span style="color:${stCol};font-size:0.72rem;">${esc(st)}</span></td>
+        <td style="font-size:0.7rem;color:var(--muted);">${dt}</td>
+        <td><a href="/incidents/${encodeURIComponent(inc.id)}" class="btn-soc" style="font-size:0.7rem;padding:3px 10px;"><i class="fas fa-arrow-right"></i></a></td>
+      </tr>`;
+    }).join('');
+  } catch(e) {
+    tbody.innerHTML = `<tr><td colspan="8" style="color:var(--muted);padding:20px;font-size:0.75rem;">Aucun incident disponible</td></tr>`;
+  }
+}
+
+// (refreshModels kept as dead code removed — models section removed from homepage)
+async function refreshModels() {
+  try {
+    const d = await fetch('/api/models/metrics').then(r => r.json());
+    const el = document.getElementById('models-row');
+    if (!el) return;
+
+    const COLS = {green:'var(--green)',blue:'var(--blue)',orange:'var(--orange)',red:'var(--red)',purple:'var(--purple)',muted:'var(--muted)'};
+
+    function metricBadge(label, val, good) {
+      if (val === null || val === undefined) return '';
+      const pct = Math.round(val * 100);
+      const color = pct >= 90 ? 'var(--green)' : pct >= 70 ? 'var(--yellow)' : 'var(--red)';
+      return `<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:3px;">
+        <span style="font-size:0.68rem;color:var(--muted);">${label}</span>
+        <div style="display:flex;align-items:center;gap:6px;">
+          <div style="width:50px;height:4px;background:var(--bg3);border-radius:2px;overflow:hidden;">
+            <div style="height:100%;width:${pct}%;background:${color};border-radius:2px;"></div>
+          </div>
+          <span style="font-size:0.72rem;font-weight:600;color:${color};min-width:30px;text-align:right;">${pct}%</span>
+        </div>
+      </div>`;
+    }
+
+    function modelCard(key, m) {
+      if (m.error) return `<div class="col"><div class="card-section h-100" style="padding:10px;border-left:3px solid var(--muted);">
+        <div style="font-size:0.8rem;color:var(--muted);">${m.name}</div>
+        <div style="font-size:0.68rem;color:var(--red);">Erreur: ${esc(m.error)}</div>
+      </div></div>`;
+
+      const c = COLS[m.color] || 'var(--muted)';
+      const hasPrecision = m.precision !== null && m.precision !== undefined;
+
+      let metricsHtml = '';
+      if (hasPrecision) {
+        metricsHtml = metricBadge('Précision', m.precision) +
+                      metricBadge('Rappel',    m.recall) +
+                      metricBadge('F1-score',  m.f1);
+      } else if (key === 'llm') {
+        const tot = m.analyzed || 0;
+        const ll  = m.llama3_real || 0;
+        metricsHtml = `
+          <div style="display:flex;justify-content:space-between;font-size:0.68rem;margin-bottom:3px;">
+            <span style="color:var(--muted);">llama3 réel</span>
+            <span style="color:var(--green);font-weight:600;">${ll} / ${tot}</span>
+          </div>
+          <div style="display:flex;justify-content:space-between;font-size:0.68rem;margin-bottom:3px;">
+            <span style="color:var(--muted);">Confiance moy.</span>
+            <span style="color:${c};font-weight:600;">${Math.round((m.avg_confidence||0)*100)}%</span>
+          </div>
+          <div style="display:flex;justify-content:space-between;font-size:0.68rem;margin-bottom:3px;">
+            <span style="color:var(--muted);">Mémoire few-shot</span>
+            <span style="color:var(--blue);font-weight:600;">${m.memory_examples} exemples</span>
+          </div>
+          <div style="display:flex;justify-content:space-between;font-size:0.68rem;">
+            <span style="color:var(--muted);">Labels → RF/DL</span>
+            <span style="color:var(--green);font-weight:600;">${m.llm_labels_for_rf} labels</span>
+          </div>`;
+      } else if (key === 'ensemble') {
+        metricsHtml = `
+          <div style="display:flex;justify-content:space-between;font-size:0.68rem;margin-bottom:3px;">
+            <span style="color:var(--muted);">Score moyen</span>
+            <span style="color:${c};font-weight:600;">${m.avg_score}</span>
+          </div>
+          <div style="display:flex;justify-content:space-between;font-size:0.68rem;margin-bottom:3px;">
+            <span style="color:var(--muted);">Votes moyens</span>
+            <span style="color:${c};font-weight:600;">${m.avg_votes}/4</span>
+          </div>
+          <div style="font-size:0.66rem;color:var(--muted);margin-top:4px;">
+            IF×30% RF×35% DL×20% Rate×15%
+          </div>`;
+      } else {
+        // IF or DL
+        metricsHtml = `
+          <div style="display:flex;justify-content:space-between;font-size:0.68rem;margin-bottom:3px;">
+            <span style="color:var(--muted);">Score moyen</span>
+            <span style="color:${c};font-weight:600;">${m.avg_score}</span>
+          </div>
+          <div style="display:flex;justify-content:space-between;font-size:0.68rem;">
+            <span style="color:var(--muted);">Seuil</span>
+            <span style="color:var(--muted);">${m.threshold}</span>
+          </div>`;
+      }
+
+      // Verdicts LLM
+      let verdictsHtml = '';
+      if (key === 'llm') {
+        verdictsHtml = `
+          <div style="display:flex;gap:4px;margin-top:6px;flex-wrap:wrap;">
+            <span style="background:rgba(63,185,80,0.15);color:var(--green);border:1px solid var(--green);border-radius:10px;font-size:0.62rem;padding:1px 7px;">TP: ${m.true_positive}</span>
+            <span style="background:rgba(248,81,73,0.15);color:var(--red);border:1px solid var(--red);border-radius:10px;font-size:0.62rem;padding:1px 7px;">FP: ${m.false_positive}</span>
+            <span style="background:rgba(227,179,65,0.15);color:var(--yellow);border:1px solid var(--yellow);border-radius:10px;font-size:0.62rem;padding:1px 7px;">?: ${m.uncertain}</span>
+          </div>`;
+      }
+
+      // Alertes 24h bar
+      const alerts24h = m.alerts_24h || m.analyzed || 0;
+      const criticalPct = alerts24h > 0 && m.critical_24h ? Math.round(m.critical_24h/alerts24h*100) : 0;
+
+      return `<div class="col-md-4 col-lg">
+        <div class="card-section h-100" style="padding:12px;border-top:3px solid ${c};">
+          <div style="display:flex;align-items:center;gap-6px;margin-bottom:8px;">
+            <div style="font-size:0.82rem;font-weight:700;color:${c};">${esc(m.name)}</div>
+            <div style="font-size:0.62rem;color:var(--muted);margin-left:auto;background:var(--bg3);padding:1px 7px;border-radius:8px;">${esc(m.type)}</div>
+          </div>
+
+          ${metricsHtml}
+          ${verdictsHtml}
+
+          <div style="border-top:1px solid var(--border);margin-top:8px;padding-top:8px;">
+            <div style="display:flex;justify-content:space-between;align-items:center;">
+              <div>
+                <div style="font-size:1.2rem;font-weight:700;color:${c};">${(alerts24h).toLocaleString()}</div>
+                <div style="font-size:0.62rem;color:var(--muted);text-transform:uppercase;letter-spacing:0.5px;">alertes 24h</div>
+              </div>
+              ${m.critical_24h !== undefined ? `<div style="text-align:right;">
+                <div style="font-size:0.9rem;font-weight:700;color:var(--red);">${m.critical_24h}</div>
+                <div style="font-size:0.62rem;color:var(--muted);">critiques</div>
+              </div>` : ''}
+            </div>
+            ${criticalPct > 0 ? `<div style="height:3px;background:var(--bg3);border-radius:2px;margin-top:4px;overflow:hidden;">
+              <div style="height:100%;width:${criticalPct}%;background:var(--red);border-radius:2px;"></div>
+            </div>` : ''}
+          </div>
+
+          ${m.trained_at ? `<div style="font-size:0.62rem;color:var(--muted);margin-top:6px;">entraîné le ${m.trained_at}</div>` : ''}
+          ${m.description ? `<div style="font-size:0.65rem;color:var(--muted);margin-top:4px;line-height:1.4;border-top:1px solid var(--border);padding-top:6px;">${esc(m.description)}</div>` : ''}
+        </div>
+      </div>`;
+    }
+
+    el.innerHTML = [
+      modelCard('rf',       d.rf),
+      modelCard('if',       d.if),
+      modelCard('dl',       d.dl),
+      modelCard('ensemble', d.ensemble),
+      modelCard('llm',      d.llm),
+    ].join('');
+
+  } catch(e) {
+    document.getElementById('models-row').innerHTML =
+      '<div class="col-12" style="color:var(--muted);text-align:center;padding:20px;">Erreur de chargement des métriques</div>';
+  }
+}
+
+// Initial load
+refreshSSH();
+refreshStats();
+loadCriticalIncidents();
+
+// Refresh intervals
+setInterval(refreshSSH,            10000);   // SSH : 10s
+setInterval(refreshStats,          10000);   // Stats : 10s
+setInterval(loadCriticalIncidents, 30000);   // Incidents critiques : 30s
+</script>
+{% endblock %}

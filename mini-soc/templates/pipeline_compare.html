@@ -1,0 +1,320 @@
+{% extends "base.html" %}
+{% block title %}Pipeline 1 vs Pipeline 2{% endblock %}
+{% block content %}
+
+<div class="d-flex align-items-center justify-content-between mb-3 flex-wrap gap-2">
+  <div>
+    <div style="font-size:1.1rem; font-weight:600;">
+      <i class="fas fa-balance-scale me-2" style="color:var(--orange);"></i>Pipeline 1 vs Pipeline 2
+    </div>
+    <div style="font-size:0.78rem; color:var(--muted);">
+      Kibana (règles statiques) vs IA Ensemble (IF + RF + DL + Rate + llama3)
+    </div>
+  </div>
+  <div class="d-flex gap-2 flex-wrap align-items-center">
+    <select id="timeWindow" onchange="loadComparison()" style="background:var(--bg3);border:1px solid var(--border);color:var(--text);border-radius:6px;padding:6px 10px;font-size:0.8rem;outline:none;">
+      <option value="30m">30 minutes</option>
+      <option value="1h" selected>1 heure</option>
+      <option value="6h">6 heures</option>
+      <option value="24h">24 heures</option>
+      <option value="7d">7 jours</option>
+    </select>
+    <button onclick="loadComparison()" class="btn-soc btn-soc-primary" style="font-size:0.8rem;">
+      <i class="fas fa-sync-alt me-1"></i>Actualiser
+    </button>
+  </div>
+</div>
+
+<!-- Summary cards -->
+<div class="row g-3 mb-3" id="summaryCards">
+  <div class="col-md-3">
+    <div class="stat-card" style="border-color:rgba(227,179,65,0.4);">
+      <div class="number" style="color:var(--yellow);" id="cnt-kibana">—</div>
+      <div class="label"><i class="fas fa-chart-bar me-1"></i>Kibana — alertes</div>
+      <div style="font-size:0.7rem; color:var(--muted); margin-top:4px;">Pipeline 1 (règles statiques)</div>
+    </div>
+  </div>
+  <div class="col-md-3">
+    <div class="stat-card" style="border-color:rgba(88,166,255,0.4);">
+      <div class="number" style="color:var(--blue);" id="cnt-ia">—</div>
+      <div class="label"><i class="fas fa-brain me-1"></i>IA — détections</div>
+      <div style="font-size:0.7rem; color:var(--muted); margin-top:4px;">Pipeline 2 (Ensemble + llama3)</div>
+    </div>
+  </div>
+  <div class="col-md-3">
+    <div class="stat-card" style="border-color:rgba(63,185,80,0.4);">
+      <div class="number" style="color:var(--green);" id="cnt-both">—</div>
+      <div class="label"><i class="fas fa-check-double me-1"></i>Détectés par les deux</div>
+      <div style="font-size:0.7rem; color:var(--muted); margin-top:4px;">Concordance</div>
+    </div>
+  </div>
+  <div class="col-md-3">
+    <div class="stat-card" style="border-color:rgba(248,81,73,0.4);">
+      <div class="number" style="color:var(--red);" id="cnt-ia-only">—</div>
+      <div class="label"><i class="fas fa-eye me-1"></i>IA seul (manqués Kibana)</div>
+      <div style="font-size:0.7rem; color:var(--muted); margin-top:4px;">Avantage Pipeline 2</div>
+    </div>
+  </div>
+</div>
+
+<!-- Venn diagram / overlap visual -->
+<div class="card-section mb-3">
+  <div class="section-title">Couverture de détection</div>
+  <div class="row align-items-center">
+    <div class="col-md-6">
+      <canvas id="overlapChart" height="160"></canvas>
+    </div>
+    <div class="col-md-6">
+      <div id="overlapExplain" style="font-size:0.82rem; color:var(--muted);">Chargement…</div>
+    </div>
+  </div>
+</div>
+
+<!-- Side-by-side comparison table -->
+<div class="row g-3">
+  <!-- Pipeline 1: Kibana / raw alerts -->
+  <div class="col-lg-6">
+    <div class="card-section p-0" style="height:100%;">
+      <div style="padding:12px 16px; border-bottom:1px solid var(--border); background:rgba(227,179,65,0.05);">
+        <div style="font-size:0.85rem; font-weight:700; color:var(--yellow);">
+          <i class="fas fa-chart-bar me-2"></i>Pipeline 1 — Kibana / Règles statiques
+        </div>
+        <div style="font-size:0.72rem; color:var(--muted); margin-top:3px;">
+          Logs bruts · Alertes Kibana · Seuils fixes · Aucune IA
+        </div>
+      </div>
+      <table style="width:100%; border-collapse:collapse; font-size:0.80rem;">
+        <thead>
+          <tr style="background:var(--bg3);">
+            <th style="padding:8px 12px; color:var(--muted); font-weight:500; border-bottom:1px solid var(--border);">Timestamp</th>
+            <th style="padding:8px 12px; color:var(--muted); font-weight:500; border-bottom:1px solid var(--border);">IP Source</th>
+            <th style="padding:8px 12px; color:var(--muted); font-weight:500; border-bottom:1px solid var(--border);">Type</th>
+            <th style="padding:8px 12px; color:var(--muted); font-weight:500; border-bottom:1px solid var(--border);">Volume</th>
+            <th style="padding:8px 12px; color:var(--muted); font-weight:500; border-bottom:1px solid var(--border);">IA?</th>
+          </tr>
+        </thead>
+        <tbody id="kibanaBody"><tr><td colspan="5" style="padding:30px; text-align:center; color:var(--muted);">Chargement…</td></tr></tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- Pipeline 2: IA Ensemble -->
+  <div class="col-lg-6">
+    <div class="card-section p-0" style="height:100%;">
+      <div style="padding:12px 16px; border-bottom:1px solid var(--border); background:rgba(88,166,255,0.05);">
+        <div style="font-size:0.85rem; font-weight:700; color:var(--blue);">
+          <i class="fas fa-brain me-2"></i>Pipeline 2 — IA Ensemble + llama3
+        </div>
+        <div style="font-size:0.72rem; color:var(--muted); margin-top:3px;">
+          IF + RF + DL + Rate · Meta-learner · Verdict llama3
+        </div>
+      </div>
+      <table style="width:100%; border-collapse:collapse; font-size:0.80rem;">
+        <thead>
+          <tr style="background:var(--bg3);">
+            <th style="padding:8px 12px; color:var(--muted); font-weight:500; border-bottom:1px solid var(--border);">Timestamp</th>
+            <th style="padding:8px 12px; color:var(--muted); font-weight:500; border-bottom:1px solid var(--border);">IP Source</th>
+            <th style="padding:8px 12px; color:var(--muted); font-weight:500; border-bottom:1px solid var(--border);">Score</th>
+            <th style="padding:8px 12px; color:var(--muted); font-weight:500; border-bottom:1px solid var(--border);">Votes</th>
+            <th style="padding:8px 12px; color:var(--muted); font-weight:500; border-bottom:1px solid var(--border);">llama3</th>
+          </tr>
+        </thead>
+        <tbody id="iaBody"><tr><td colspan="5" style="padding:30px; text-align:center; color:var(--muted);">Chargement…</td></tr></tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<!-- IA-only detections (what Kibana missed) -->
+<div class="card-section mt-3" id="iaOnlySection" style="display:none;">
+  <div class="section-title" style="color:var(--red);">
+    <i class="fas fa-eye me-1"></i>Détectés uniquement par l'IA (manqués par Kibana)
+  </div>
+  <div id="iaOnlyContent"></div>
+</div>
+
+<style>
+.badge-level { font-size:0.62rem; font-weight:700; padding:2px 6px; border-radius:8px; }
+.badge-L1 { background:rgba(63,185,80,0.15); color:var(--green); }
+.badge-L2 { background:rgba(88,166,255,0.15); color:var(--blue); }
+.badge-L3 { background:rgba(248,81,73,0.15); color:var(--red); }
+.match-dot { width:8px; height:8px; border-radius:50%; display:inline-block; margin-right:4px; }
+</style>
+
+<script>
+let overlapChart = null;
+
+async function loadComparison() {
+  const w = document.getElementById('timeWindow').value;
+
+  // Parallel fetch
+  const [kibanaData, iaData] = await Promise.all([
+    fetch(`/api/pipeline_compare/kibana?window=${w}`).then(r => r.json()),
+    fetch(`/api/pipeline_compare/ia?window=${w}`).then(r => r.json()),
+  ]);
+
+  renderKibana(kibanaData, iaData);
+  renderIA(iaData, kibanaData);
+  updateSummary(kibanaData, iaData);
+  renderOverlap(kibanaData, iaData);
+  renderIAOnly(iaData, kibanaData);
+}
+
+function renderKibana(data, iaData) {
+  const iaIPs = new Set((iaData.detections || []).map(d => d.src_ip));
+  const rows = data.alerts || [];
+  if (!rows.length) {
+    document.getElementById('kibanaBody').innerHTML =
+      '<tr><td colspan="5" style="padding:30px; text-align:center; color:var(--muted);"><i class="fas fa-check-circle me-2" style="color:var(--green);"></i>Aucune alerte Kibana dans cette fenêtre</td></tr>';
+    return;
+  }
+  let html = '';
+  rows.forEach(row => {
+    const inIA = iaIPs.has(row.src_ip);
+    const ts = row.timestamp ? row.timestamp.substring(0,16).replace('T',' ') : '—';
+    html += `<tr style="border-bottom:1px solid var(--border);">
+      <td style="padding:7px 12px; font-family:monospace; font-size:0.72rem; color:var(--muted);">${ts}</td>
+      <td style="padding:7px 12px; font-family:monospace; font-size:0.75rem; color:var(--red);">${row.src_ip || '—'}</td>
+      <td style="padding:7px 12px; font-size:0.72rem;">${row.log_type || '—'}</td>
+      <td style="padding:7px 12px; font-size:0.75rem; color:var(--orange);">${row.count || '—'} logs</td>
+      <td style="padding:7px 12px;">
+        ${inIA ? '<span style="color:var(--green); font-size:0.72rem;">✓ IA</span>' : '<span style="color:var(--muted); font-size:0.72rem;">—</span>'}
+      </td>
+    </tr>`;
+  });
+  document.getElementById('kibanaBody').innerHTML = html;
+}
+
+function renderIA(data, kibanaData) {
+  const kibanaIPs = new Set((kibanaData.alerts || []).map(a => a.src_ip));
+  const rows = data.detections || [];
+  if (!rows.length) {
+    document.getElementById('iaBody').innerHTML =
+      '<tr><td colspan="5" style="padding:30px; text-align:center; color:var(--muted);"><i class="fas fa-check-circle me-2" style="color:var(--green);"></i>Aucune détection IA dans cette fenêtre</td></tr>';
+    return;
+  }
+  let html = '';
+  rows.forEach(row => {
+    const inKibana = kibanaIPs.has(row.src_ip);
+    const ts = row.timestamp ? row.timestamp.substring(0,16).replace('T',' ') : '—';
+    const score = row.ensemble_score ? parseFloat(row.ensemble_score).toFixed(3) : '—';
+    const scoreColor = row.ensemble_score >= 0.7 ? 'var(--red)' : row.ensemble_score >= 0.4 ? 'var(--orange)' : 'var(--blue)';
+    const llm = row.llm_verdict === 'true_positive'  ? '<span style="color:var(--red); font-size:0.72rem;">TP ✓</span>'
+              : row.llm_verdict === 'false_positive' ? '<span style="color:var(--muted); font-size:0.72rem;">FP ✗</span>'
+              : '<span style="color:var(--muted); font-size:0.72rem;">—</span>';
+    html += `<tr style="border-bottom:1px solid var(--border); ${!inKibana ? 'background:rgba(248,81,73,0.04);' : ''}">
+      <td style="padding:7px 12px; font-family:monospace; font-size:0.72rem; color:var(--muted);">${ts}</td>
+      <td style="padding:7px 12px; font-family:monospace; font-size:0.75rem; color:var(--red);">
+        ${!inKibana ? '<span title="Non détecté par Kibana" style="color:var(--red);">★ </span>' : ''}${row.src_ip || '—'}
+      </td>
+      <td style="padding:7px 12px; font-family:monospace; font-size:0.75rem; color:${scoreColor}; font-weight:600;">${score}</td>
+      <td style="padding:7px 12px; font-size:0.72rem; color:var(--muted);">${row.votes || '—'}/4</td>
+      <td style="padding:7px 12px;">${llm}</td>
+    </tr>`;
+  });
+  document.getElementById('iaBody').innerHTML = html;
+}
+
+function updateSummary(kibanaData, iaData) {
+  const kibanaIPs = new Set((kibanaData.alerts || []).map(a => a.src_ip));
+  const iaIPs     = new Set((iaData.detections || []).map(d => d.src_ip));
+  const both      = [...kibanaIPs].filter(ip => iaIPs.has(ip)).length;
+  const iaOnly    = [...iaIPs].filter(ip => !kibanaIPs.has(ip)).length;
+
+  document.getElementById('cnt-kibana').textContent  = kibanaData.total || kibanaIPs.size || 0;
+  document.getElementById('cnt-ia').textContent      = iaData.total || iaIPs.size || 0;
+  document.getElementById('cnt-both').textContent    = both;
+  document.getElementById('cnt-ia-only').textContent = iaOnly;
+}
+
+function renderOverlap(kibanaData, iaData) {
+  const kibanaIPs = new Set((kibanaData.alerts || []).map(a => a.src_ip));
+  const iaIPs     = new Set((iaData.detections || []).map(d => d.src_ip));
+  const kOnly  = [...kibanaIPs].filter(ip => !iaIPs.has(ip)).length;
+  const iOnly  = [...iaIPs].filter(ip => !kibanaIPs.has(ip)).length;
+  const both   = [...kibanaIPs].filter(ip => iaIPs.has(ip)).length;
+
+  const ctx = document.getElementById('overlapChart').getContext('2d');
+  if (overlapChart) overlapChart.destroy();
+  overlapChart = new Chart(ctx, {
+    type: 'doughnut',
+    data: {
+      labels: ['Kibana seul', 'Les deux', 'IA seul'],
+      datasets: [{
+        data: [kOnly, both, iOnly],
+        backgroundColor: ['rgba(227,179,65,0.7)', 'rgba(63,185,80,0.7)', 'rgba(248,81,73,0.7)'],
+        borderColor: ['#e3b341','#3fb950','#f85149'],
+        borderWidth: 1,
+      }]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: {
+        legend: { labels: { color: '#8b949e', font: { size: 11 } } },
+      }
+    }
+  });
+
+  const total = kOnly + iOnly + both || 1;
+  const iaExtra = iOnly;
+  const percent = Math.round(iaExtra / total * 100);
+  document.getElementById('overlapExplain').innerHTML = `
+    <div style="margin-bottom:12px;">
+      <span style="display:inline-block; width:12px; height:12px; background:#e3b341; border-radius:3px; margin-right:6px;"></span>
+      <strong>${kOnly}</strong> IP(s) détectées uniquement par Kibana (règles fixes)
+    </div>
+    <div style="margin-bottom:12px;">
+      <span style="display:inline-block; width:12px; height:12px; background:#3fb950; border-radius:3px; margin-right:6px;"></span>
+      <strong>${both}</strong> IP(s) détectées par <em>les deux</em> pipelines
+    </div>
+    <div style="margin-bottom:16px;">
+      <span style="display:inline-block; width:12px; height:12px; background:#f85149; border-radius:3px; margin-right:6px;"></span>
+      <strong>${iOnly}</strong> IP(s) détectées <strong>uniquement par l'IA</strong>
+      ${iaExtra > 0 ? `<span style="color:var(--red); font-size:0.75rem; margin-left:6px;">(+${percent}% de menaces manquées par Kibana)</span>` : ''}
+    </div>
+    ${iaExtra > 0
+      ? `<div style="background:rgba(248,81,73,0.08); border:1px solid rgba(248,81,73,0.3); border-radius:8px; padding:10px 14px; font-size:0.78rem; color:var(--text);">
+           <i class="fas fa-exclamation-triangle me-2" style="color:var(--red);"></i>
+           L'IA a détecté <strong style="color:var(--red);">${iaExtra} menace(s)</strong> invisibles aux règles Kibana.
+           Ces attaques ont contourné les seuils statiques.
+         </div>`
+      : `<div style="background:rgba(63,185,80,0.08); border:1px solid rgba(63,185,80,0.3); border-radius:8px; padding:10px 14px; font-size:0.78rem; color:var(--text);">
+           <i class="fas fa-check-circle me-2" style="color:var(--green);"></i>
+           Les deux pipelines sont en accord sur cette fenêtre.
+         </div>`
+    }`;
+}
+
+function renderIAOnly(iaData, kibanaData) {
+  const kibanaIPs = new Set((kibanaData.alerts || []).map(a => a.src_ip));
+  const iaOnly = (iaData.detections || []).filter(d => !kibanaIPs.has(d.src_ip));
+  const section = document.getElementById('iaOnlySection');
+  if (!iaOnly.length) { section.style.display = 'none'; return; }
+  section.style.display = 'block';
+
+  let html = `<div style="font-size:0.78rem; color:var(--muted); margin-bottom:10px;">
+    Ces IPs ont déclenché l'IA (comportement anormal) mais n'ont <strong>pas</strong> atteint les seuils statiques de Kibana.
+    Cela démontre la valeur de l'approche ML pour détecter les attaques lentes ou évasives.
+  </div>
+  <div class="d-flex flex-wrap gap-2">`;
+
+  iaOnly.forEach(d => {
+    const scoreColor = d.ensemble_score >= 0.7 ? 'var(--red)' : d.ensemble_score >= 0.4 ? 'var(--orange)' : 'var(--blue)';
+    const llm = d.llm_verdict === 'true_positive' ? '🔴 TP' : d.llm_verdict === 'false_positive' ? '⚪ FP' : '❓';
+    html += `<div style="background:var(--bg3); border:1px solid rgba(248,81,73,0.3); border-radius:8px; padding:10px 14px; min-width:200px; max-width:260px;">
+      <div style="font-family:monospace; font-size:0.78rem; color:var(--red); font-weight:700; margin-bottom:4px;">${d.src_ip}</div>
+      <div style="font-size:0.72rem; color:var(--muted);">Score ensemble : <span style="color:${scoreColor}; font-weight:700;">${parseFloat(d.ensemble_score || 0).toFixed(3)}</span></div>
+      <div style="font-size:0.72rem; color:var(--muted);">Votes : ${d.votes || '—'}/4</div>
+      <div style="font-size:0.72rem; color:var(--muted);">llama3 : ${llm}</div>
+      <div style="font-size:0.70rem; color:var(--muted); margin-top:4px;">${d.timestamp ? d.timestamp.substring(0,16).replace('T',' ') : ''}</div>
+    </div>`;
+  });
+  html += '</div>';
+  document.getElementById('iaOnlyContent').innerHTML = html;
+}
+
+loadComparison();
+setInterval(loadComparison, 60000);
+</script>
+
+{% endblock %}

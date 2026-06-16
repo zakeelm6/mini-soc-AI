@@ -1,0 +1,229 @@
+{% extends "base.html" %}
+{% block title %}CVE & MITRE ATT&CK{% endblock %}
+{% block content %}
+
+<div class="d-flex justify-content-between align-items-center mb-3">
+  <div>
+    <h5 style="margin:0;font-weight:700;">
+      <i class="fas fa-bug me-2" style="color:var(--orange);"></i>CVE critiques — MITRE ATT&CK & Exposition Lab
+    </h5>
+    <div style="font-size:0.78rem;color:var(--muted);margin-top:2px;">
+      CVSS ≥ 9.0 · NVD · Corrélation avec attaques en cours · Mapping MITRE ATT&CK
+    </div>
+  </div>
+</div>
+
+<!-- KPI row -->
+<div class="row g-2 mb-3">
+  <div class="col-6 col-md-3">
+    <div class="stat-card" style="border-top:3px solid var(--orange);">
+      <div class="number" style="color:var(--orange);font-size:1.9rem;">{{ total }}</div>
+      <div class="label"><i class="fas fa-bug me-1"></i>CVE détectées</div>
+    </div>
+  </div>
+  <div class="col-6 col-md-3">
+    <div class="stat-card" style="border-top:3px solid var(--red);">
+      <div class="number" style="color:var(--red);font-size:1.9rem;">{{ critical_9 }}</div>
+      <div class="label"><i class="fas fa-skull-crossbones me-1"></i>CVSS ≥ 9.5</div>
+    </div>
+  </div>
+  <div class="col-6 col-md-3">
+    <div class="stat-card" style="border-top:3px solid var(--yellow);">
+      <div class="number" style="color:var(--yellow);font-size:1.9rem;">{{ lab_exposed }}</div>
+      <div class="label"><i class="fas fa-radiation me-1"></i>Services exposés</div>
+    </div>
+  </div>
+  <div class="col-6 col-md-3">
+    <div class="stat-card" style="border-top:3px solid var(--purple);">
+      <div class="number" style="color:var(--purple);font-size:1.9rem;">{{ mitre_mapped }}</div>
+      <div class="label"><i class="fas fa-crosshairs me-1"></i>MITRE mappées</div>
+    </div>
+  </div>
+</div>
+
+<!-- Platform exposure banner -->
+{% if lab_exposed > 0 %}
+<div class="mb-3" style="background:rgba(248,81,73,0.08);border:1px solid rgba(248,81,73,0.3);border-radius:10px;padding:14px 18px;">
+  <div style="display:flex;align-items:center;gap-10px;flex-wrap:wrap;gap:12px;">
+    <i class="fas fa-radiation-alt" style="color:var(--red);font-size:1.2rem;"></i>
+    <div style="flex:1;">
+      <div style="font-size:0.85rem;font-weight:700;color:var(--red);">⚠ {{ lab_exposed }} CVE affectent des services de votre infrastructure</div>
+      <div style="font-size:0.75rem;color:var(--muted);margin-top:2px;">
+        Les services suivants sont exposés dans votre lab et peuvent être ciblés par un attaquant ayant un accès réseau :
+        VM Victime (<span style="color:var(--text);font-family:monospace;">192.168.122.210</span>) ·
+        SOC Plateforme (<span style="color:var(--text);font-family:monospace;">192.168.50.10</span>)
+      </div>
+    </div>
+  </div>
+</div>
+{% endif %}
+
+<!-- How it works -->
+<div class="card-section mb-3" style="padding:14px 18px;">
+  <div class="section-title"><i class="fas fa-info-circle me-1"></i>Sources & Méthodologie</div>
+  <div class="row g-2" style="font-size:0.78rem;">
+    <div class="col-md-3"><div style="background:var(--bg3);border-radius:8px;padding:10px 12px;">
+      <div style="color:var(--yellow);font-weight:600;margin-bottom:4px;"><i class="fas fa-globe me-1"></i>NVD / NIST</div>
+      Interroge l'API <strong>services.nvd.nist.gov</strong> toutes les 6h. Fenêtre 30 jours. Filtre CVSS ≥ 9.0.
+    </div></div>
+    <div class="col-md-3"><div style="background:var(--bg3);border-radius:8px;padding:10px 12px;">
+      <div style="color:var(--purple);font-weight:600;margin-bottom:4px;"><i class="fas fa-crosshairs me-1"></i>MITRE ATT&CK</div>
+      Mapping automatique par analyse de description : techniques, tactiques, IDs T-XXXX.
+    </div></div>
+    <div class="col-md-3"><div style="background:var(--bg3);border-radius:8px;padding:10px 12px;">
+      <div style="color:var(--red);font-weight:600;margin-bottom:4px;"><i class="fas fa-radiation me-1"></i>Exposition Lab</div>
+      Corrélation avec les services actifs : SSH, Apache, ES, Flask SOC. Identifie l'hôte exposé.
+    </div></div>
+    <div class="col-md-3"><div style="background:var(--bg3);border-radius:8px;padding:10px 12px;">
+      <div style="color:var(--orange);font-weight:600;margin-bottom:4px;"><i class="fas fa-link me-1"></i>Incidents liés</div>
+      Croise avec incidents actifs (TP confirmés, criticité élevée) pour contextualiser la menace.
+    </div></div>
+  </div>
+</div>
+
+<!-- CVE cards -->
+<div class="d-flex flex-column gap-3">
+{% for c in cves %}
+{% set cvss = c.get('cvss_score', 0) | float %}
+{% set has_lab = c._lab_hits | length > 0 %}
+{% set has_mitre = c._mitre | length > 0 %}
+{% set border_color = 'var(--red)' if has_lab else ('var(--orange)' if cvss >= 9.5 else 'var(--border)') %}
+
+<div style="background:var(--bg2);border:1px solid var(--border);border-radius:10px;overflow:hidden;
+     {% if has_lab %}border-left:4px solid var(--red);{% elif cvss >= 9.5 %}border-left:4px solid var(--orange);{% else %}border-left:4px solid var(--border);{% endif %}">
+
+  <!-- CVE Header -->
+  <div style="padding:14px 18px;display:flex;align-items:flex-start;gap:14px;flex-wrap:wrap;">
+    <!-- Score -->
+    <div style="text-align:center;min-width:56px;flex-shrink:0;">
+      <div style="font-size:1.6rem;font-weight:800;line-height:1;color:{% if cvss >= 9.5 %}var(--red){% elif cvss >= 9.0 %}var(--orange){% else %}var(--yellow){% endif %};">
+        {{ '%.1f'|format(cvss) }}
+      </div>
+      <div style="font-size:0.58rem;color:var(--muted);text-transform:uppercase;letter-spacing:1px;">CVSS</div>
+    </div>
+
+    <!-- CVE ID + title -->
+    <div style="flex:1;min-width:200px;">
+      <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:4px;">
+        <a href="https://nvd.nist.gov/vuln/detail/{{ c.get('cve_id','') }}" target="_blank"
+           style="font-family:monospace;font-size:0.9rem;font-weight:700;color:var(--red);text-decoration:none;">
+          {{ c.get('cve_id','?') }}
+          <i class="fas fa-external-link-alt" style="font-size:0.6rem;margin-left:3px;"></i>
+        </a>
+        <span class="badge-sev sev-critical">CRITIQUE</span>
+        {% if has_lab %}
+        <span style="background:rgba(248,81,73,0.15);color:var(--red);border:1px solid rgba(248,81,73,0.4);border-radius:10px;font-size:0.65rem;padding:2px 8px;font-weight:600;">
+          <i class="fas fa-radiation me-1"></i>EXPOSÉ dans votre lab
+        </span>
+        {% endif %}
+        {% if c._exploit_risk == 'high' %}
+        <span style="background:rgba(248,81,73,0.15);color:var(--orange);border:1px solid var(--orange);border-radius:10px;font-size:0.65rem;padding:2px 8px;">
+          <i class="fas fa-bomb me-1"></i>Exploit connu
+        </span>
+        {% endif %}
+      </div>
+      <div style="font-size:0.78rem;color:var(--muted);line-height:1.5;">
+        {{ c.get('description','')[:280] }}{% if c.get('description','')|length > 280 %}…{% endif %}
+      </div>
+      <div style="font-size:0.68rem;color:var(--muted);margin-top:4px;">
+        <i class="fas fa-clock me-1"></i>{{ c.get('@timestamp','')[:10] }}
+      </div>
+    </div>
+  </div>
+
+  <!-- MITRE ATT&CK -->
+  {% if has_mitre %}
+  <div style="padding:10px 18px;border-top:1px solid var(--border);background:rgba(210,168,255,0.04);">
+    <div style="font-size:0.65rem;text-transform:uppercase;letter-spacing:1px;color:var(--purple);margin-bottom:6px;">
+      <i class="fas fa-crosshairs me-1"></i>MITRE ATT&CK
+    </div>
+    <div style="display:flex;flex-wrap:wrap;gap:6px;">
+      {% for tech in c._mitre %}
+      <div style="display:flex;align-items:center;gap-6px;background:rgba(210,168,255,0.08);border:1px solid rgba(210,168,255,0.25);border-radius:8px;padding:5px 10px;gap:8px;">
+        <div>
+          <div style="font-family:monospace;font-size:0.72rem;font-weight:700;color:var(--purple);">{{ tech.id }}</div>
+          <div style="font-size:0.70rem;color:var(--text);font-weight:600;">{{ tech.name }}</div>
+          <div style="font-size:0.62rem;color:var(--muted);">
+            {{ tech.tactic }}
+            <span style="font-family:monospace;color:var(--border);">· {{ tech.tactic_id }}</span>
+          </div>
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+  </div>
+  {% endif %}
+
+  <!-- Lab exposure -->
+  {% if has_lab %}
+  <div style="padding:10px 18px;border-top:1px solid var(--border);background:rgba(248,81,73,0.04);">
+    <div style="font-size:0.65rem;text-transform:uppercase;letter-spacing:1px;color:var(--red);margin-bottom:6px;">
+      <i class="fas fa-server me-1"></i>Services exposés dans votre infrastructure
+    </div>
+    <div style="display:flex;flex-wrap:wrap;gap:6px;">
+      {% for svc in c._lab_hits %}
+      {% set svc_colors = {'red':'var(--red)','orange':'var(--orange)','yellow':'var(--yellow)','blue':'var(--blue)','green':'var(--green)','purple':'var(--purple)','muted':'var(--muted)'} %}
+      {% set sc = svc_colors.get(svc.color, 'var(--muted)') %}
+      <div style="background:var(--bg3);border:1px solid {{ sc }}33;border-radius:8px;padding:6px 10px;display:flex;align-items:center;gap:8px;">
+        <i class="fas {{ svc.icon }}" style="color:{{ sc }};width:14px;text-align:center;"></i>
+        <div>
+          <div style="font-size:0.75rem;font-weight:600;color:{{ sc }};">{{ svc.name }}</div>
+          <div style="font-size:0.65rem;color:var(--muted);">
+            <span style="font-family:monospace;">{{ svc.host }}</span>
+            <span style="background:var(--bg2);border:1px solid var(--border);border-radius:4px;padding:1px 5px;margin-left:4px;font-size:0.60rem;">{{ svc.role }}</span>
+          </div>
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+    <!-- Attack scenario -->
+    <div style="margin-top:8px;padding:8px 10px;background:rgba(248,81,73,0.08);border-radius:6px;font-size:0.74rem;color:var(--muted);line-height:1.5;">
+      <i class="fas fa-exclamation-circle me-1" style="color:var(--red);"></i>
+      <strong style="color:var(--text);">Scénario d'attaque :</strong>
+      Un attaquant depuis le réseau lab (ex: <span style="color:var(--red);font-family:monospace;">192.168.122.231</span>)
+      peut exploiter cette vulnérabilité sur
+      <strong>{{ c._lab_hits | map(attribute='name') | join(', ') }}</strong>
+      {% if c._mitre %}
+      via la technique MITRE
+      <strong style="color:var(--purple);">{{ c._mitre[0].id }} — {{ c._mitre[0].name }}</strong>
+      {% endif %}
+      pour {% if c._mitre and 'Initial Access' in c._mitre[0].tactic %}obtenir un accès initial
+      {% elif c._mitre and 'Privilege' in c._mitre[0].tactic %}escalader ses privilèges
+      {% elif c._mitre and 'Execution' in c._mitre[0].tactic %}exécuter du code arbitraire
+      {% else %}compromettre le système{% endif %}.
+    </div>
+  </div>
+  {% endif %}
+
+  <!-- Related incidents -->
+  {% if c._related_incidents and has_lab %}
+  <div style="padding:10px 18px;border-top:1px solid var(--border);background:rgba(255,166,87,0.03);">
+    <div style="font-size:0.65rem;text-transform:uppercase;letter-spacing:1px;color:var(--orange);margin-bottom:6px;">
+      <i class="fas fa-link me-1"></i>Incidents actifs liés (même infrastructure)
+    </div>
+    <div style="display:flex;flex-wrap:wrap;gap:6px;">
+      {% for inc in c._related_incidents %}
+      <a href="/incidents" style="text-decoration:none;">
+        <div style="background:var(--bg3);border:1px solid var(--border);border-radius:6px;padding:5px 10px;display:flex;align-items:center;gap:8px;">
+          <span style="font-family:monospace;color:var(--orange);font-size:0.72rem;">{{ inc.get('src_ip','?') }}</span>
+          <span class="badge-sev sev-{{ inc.get('severity','medium') }}" style="font-size:0.60rem;">{{ inc.get('severity','?') }}</span>
+          {% if inc.get('verdict') == 'true_positive' %}
+          <span style="color:var(--green);font-size:0.65rem;"><i class="fas fa-check-circle me-1"></i>TP confirmé</span>
+          {% endif %}
+        </div>
+      </a>
+      {% endfor %}
+    </div>
+  </div>
+  {% endif %}
+
+</div>
+{% else %}
+<div class="empty-state">
+  <i class="fas fa-shield-alt fa-2x mb-2" style="color:var(--green);display:block;"></i>
+  <p style="color:var(--green);">Aucune CVE critique détectée</p>
+</div>
+{% endfor %}
+</div>
+
+{% endblock %}

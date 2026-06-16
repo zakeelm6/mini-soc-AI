@@ -1,0 +1,328 @@
+{% extends "base.html" %}
+{% block title %}Stealth vs Kibana{% endblock %}
+{% block content %}
+
+<style>
+.expand-row { cursor:pointer; transition:background 0.15s; }
+.expand-row:hover td { background:rgba(88,166,255,0.05) !important; }
+.detail-row td { padding:0 !important; }
+.detail-panel { display:none; padding:12px 20px 14px 28px; background:rgba(0,0,0,0.25); border-top:1px solid var(--border); }
+.detail-panel.open { display:block; }
+.score-bar-wrap { display:flex; align-items:center; gap:6px; }
+.score-bar { height:6px; border-radius:3px; flex-shrink:0; }
+.model-label { font-size:0.7rem; color:var(--muted); width:22px; }
+.score-val { font-size:0.72rem; font-weight:700; width:38px; }
+.cve-chip { background:rgba(255,167,38,0.15); color:var(--orange); border:1px solid rgba(255,167,38,0.3); font-size:0.68rem; padding:1px 7px; border-radius:10px; }
+.mitre-chip { background:rgba(168,85,247,0.15); color:#c084fc; border:1px solid rgba(168,85,247,0.3); font-size:0.68rem; padding:1px 8px; border-radius:10px; font-family:monospace; }
+.verdict-chip { font-size:0.7rem; font-weight:700; padding:2px 9px; border-radius:8px; }
+.logtype-chip { background:rgba(56,189,248,0.12); color:var(--cyan); border:1px solid rgba(56,189,248,0.25); font-size:0.68rem; padding:1px 7px; border-radius:10px; }
+</style>
+
+<div class="d-flex align-items-center justify-content-between mb-3 flex-wrap gap-2">
+  <div>
+    <h5 style="margin:0;font-weight:700;">
+      <i class="fas fa-user-ninja me-2" style="color:var(--purple);"></i>Stealth vs Kibana — Comparaison détection
+    </h5>
+    <p style="font-size:0.75rem;color:var(--muted);margin:4px 0 0;">
+      Chaque attaque détectée est classée : IA seul · Kibana seul · Les deux — cliquez une ligne pour le détail
+    </p>
+  </div>
+  <div class="d-flex gap-2 align-items-center">
+    <select id="sel-window" class="form-select form-select-sm" style="width:120px;background:var(--bg3);color:var(--text);border-color:var(--border)" onchange="load()">
+      <option value="1h">1 heure</option>
+      <option value="6h">6 heures</option>
+      <option value="24h">24 heures</option>
+      <option value="72h">3 jours</option>
+      <option value="7d" selected>7 jours</option>
+    </select>
+    <button onclick="load()" class="btn-soc btn-soc-primary">
+      <i class="fas fa-sync-alt me-1"></i>Actualiser
+    </button>
+  </div>
+</div>
+
+<!-- KPI badges -->
+<div class="d-flex gap-3 flex-wrap mb-3">
+  <span class="badge" id="kpi-ia"    style="background:rgba(255,71,87,0.15);color:var(--red);font-size:0.78rem;font-weight:700;padding:6px 14px;">IA seul : —</span>
+  <span class="badge" id="kpi-both"  style="background:rgba(63,185,80,0.15);color:var(--green);font-size:0.78rem;font-weight:700;padding:6px 14px;">Les deux : —</span>
+  <span class="badge" id="kpi-kb"    style="background:rgba(255,167,38,0.15);color:var(--orange);font-size:0.78rem;font-weight:700;padding:6px 14px;">Kibana seul : —</span>
+  <span class="badge" id="kpi-total" style="background:rgba(88,166,255,0.15);color:var(--blue);font-size:0.78rem;font-weight:700;padding:6px 14px;">Total : —</span>
+</div>
+
+<!-- Légende -->
+<div class="card-section mb-3" style="padding:10px 16px;">
+  <div class="d-flex flex-wrap gap-4" style="font-size:0.75rem;color:var(--muted);">
+    <span><span style="color:var(--red);font-weight:700;">● IA seul</span> — Score ≥ 0.28 · rate &lt; 10/min — attaque stealth sous le seuil Kibana</span>
+    <span><span style="color:var(--green);font-weight:700;">● Les deux</span> — Score ≥ 0.28 ET rate ≥ 10/min — attaque bruyante confirmée</span>
+    <span><span style="color:var(--orange);font-weight:700;">● Kibana seul</span> — Rate ≥ 10/min · Score &lt; 0.28 — volume élevé, non-anomal pour l'IA</span>
+  </div>
+</div>
+
+<!-- Tableau -->
+<div class="card-section" style="padding:0;overflow:hidden;">
+  <div class="d-flex align-items-center justify-content-between px-3 py-2" style="border-bottom:1px solid var(--border);">
+    <span class="fw-bold small"><i class="fas fa-table me-2" style="color:var(--cyan)"></i>Toutes les détections</span>
+    <div class="d-flex gap-2 align-items-center">
+      <select id="filter-cat" class="form-select form-select-sm" style="width:140px;background:var(--bg3);color:var(--text);border-color:var(--border)" onchange="renderTable()">
+        <option value="all">Tous</option>
+        <option value="ia_only">IA seul</option>
+        <option value="both">Les deux</option>
+        <option value="kb_only">Kibana seul</option>
+      </select>
+      <span id="row-count" class="text-muted small">—</span>
+    </div>
+  </div>
+  <div class="table-responsive">
+    <table class="table soc-table mb-0" style="font-size:0.78rem;">
+      <thead>
+        <tr>
+          <th style="width:18px;"></th>
+          <th>IP source</th>
+          <th>Type attaque</th>
+          <th>MITRE tactic</th>
+          <th>Score IA</th>
+          <th>Rate /5min</th>
+          <th>Sévérité</th>
+          <th>Log source</th>
+          <th class="text-center">Détecté par</th>
+          <th>Horodatage</th>
+        </tr>
+      </thead>
+      <tbody id="main-tbody">
+        <tr><td colspan="10" class="empty-state"><i class="fas fa-spinner fa-spin me-2"></i>Chargement…</td></tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<script>
+let _allRows = [];
+
+function esc(s) {
+  const d = document.createElement('div'); d.textContent = String(s||''); return d.innerHTML;
+}
+
+function scoreColor(v) {
+  v = parseFloat(v||0);
+  return v >= 0.7 ? 'var(--red)' : v >= 0.45 ? 'var(--orange)' : v >= 0.28 ? 'var(--yellow)' : 'var(--muted)';
+}
+
+function detBadge(cat) {
+  if (cat === 'ia_only') return '<span style="background:rgba(255,71,87,0.15);color:var(--red);font-weight:700;font-size:0.7rem;padding:3px 10px;border-radius:8px;border:1px solid rgba(255,71,87,0.3)"><i class="fas fa-brain me-1"></i>IA seul</span>';
+  if (cat === 'both')    return '<span style="background:rgba(63,185,80,0.15);color:var(--green);font-weight:700;font-size:0.7rem;padding:3px 10px;border-radius:8px;border:1px solid rgba(63,185,80,0.3)"><i class="fas fa-check-double me-1"></i>Les deux</span>';
+  return '<span style="background:rgba(255,167,38,0.15);color:var(--orange);font-weight:700;font-size:0.7rem;padding:3px 10px;border-radius:8px;border:1px solid rgba(255,167,38,0.3)"><i class="fas fa-chart-bar me-1"></i>Kibana seul</span>';
+}
+
+function attackBadge(at) {
+  if (!at) return '<span style="color:var(--muted);font-size:0.72rem;">—</span>';
+  const map = {
+    brute_force: ['var(--red)',    '#ff475720', 'fa-key',          'Brute Force'],
+    web_attack:  ['var(--orange)', '#ffa72620', 'fa-globe',        'Web Attack'],
+    scan:        ['var(--blue)',   '#58a6ff20', 'fa-search',       'Scan'],
+    anomaly_ia:  ['#c084fc',      '#a855f720', 'fa-brain',        'Anomalie IA'],
+    cve:         ['var(--yellow)', '#ffd70020', 'fa-bug',          'CVE Exploit'],
+    ids_alert:   ['var(--cyan)',   '#38bdf820', 'fa-shield-alt',   'IDS Alert'],
+  };
+  const [c, bg, ico, lbl] = map[at] || ['var(--muted)', 'rgba(255,255,255,0.05)', 'fa-question', at];
+  return `<span style="background:${bg};color:${c};border:1px solid ${c}40;font-size:0.68rem;padding:2px 8px;border-radius:8px;white-space:nowrap;">
+    <i class="fas ${ico} me-1"></i>${lbl}</span>`;
+}
+
+function mitreBadge(tactic) {
+  if (!tactic) return '<span style="color:var(--muted);font-size:0.72rem;">—</span>';
+  const short = tactic.replace(/TA\d+\s*[—-]\s*/i, '').trim();
+  const ta    = (tactic.match(/TA\d+/) || [''])[0];
+  return `<span class="mitre-chip" title="${esc(tactic)}">${ta ? ta+' ' : ''}${esc(short)}</span>`;
+}
+
+function logTypeBadge(lt) {
+  if (!lt) return '<span style="color:var(--muted);font-size:0.72rem;">—</span>';
+  const map = {
+    auth:          ['fa-lock',       'Auth/SSH'],
+    apache_access: ['fa-globe',      'Apache'],
+    apache_error:  ['fa-exclamation','Apache Err'],
+    audit:         ['fa-terminal',   'Audit'],
+    suricata:      ['fa-shield-alt', 'Suricata'],
+    syslog:        ['fa-server',     'Syslog'],
+  };
+  const [ico, lbl] = map[lt] || ['fa-file-alt', lt];
+  return `<span class="logtype-chip"><i class="fas ${ico} me-1"></i>${lbl}</span>`;
+}
+
+function scoreBar(val, color) {
+  const pct = Math.min(100, parseFloat(val||0)*100).toFixed(0);
+  return `<div class="score-bar-wrap">
+    <span class="score-val" style="color:${color}">${parseFloat(val||0).toFixed(3)}</span>
+    <div style="flex:1;height:6px;background:var(--bg3);border-radius:3px;overflow:hidden;min-width:60px;">
+      <div style="height:100%;width:${pct}%;background:${color};border-radius:3px;"></div>
+    </div>
+  </div>`;
+}
+
+function verdictHtml(verdict, conf) {
+  if (!verdict) return '<span style="color:var(--muted);font-size:0.72rem;">—</span>';
+  const isMal = verdict.toLowerCase().includes('mali') || verdict.toLowerCase() === 'malicious';
+  const c  = isMal ? 'var(--red)' : 'var(--green)';
+  const bg = isMal ? 'rgba(255,71,87,0.15)' : 'rgba(63,185,80,0.15)';
+  const confStr = conf ? ` · <span style="color:var(--muted)">${parseFloat(conf*100).toFixed(0)}%</span>` : '';
+  return `<span class="verdict-chip" style="background:${bg};color:${c};border:1px solid ${c}40">
+    <i class="fas fa-${isMal?'skull-crossbones':'check-circle'} me-1"></i>${esc(verdict)}${confStr}
+  </span>`;
+}
+
+function buildDetailHtml(d) {
+  const sc = parseFloat(d.ensemble_score||0);
+  const ifs = parseFloat(d.if_score||0), rfs = parseFloat(d.rf_score||0), dls = parseFloat(d.dl_score||0);
+  const cves = Array.isArray(d.related_cves) ? d.related_cves : [];
+
+  return `<div class="detail-panel open">
+    <div class="row g-3">
+
+      <!-- Scores individuels -->
+      <div class="col-md-4">
+        <div style="font-size:0.7rem;color:var(--muted);font-weight:600;margin-bottom:8px;text-transform:uppercase;letter-spacing:.05em;">
+          <i class="fas fa-chart-pie me-1"></i>Scores modèles
+        </div>
+        <div class="mb-2">
+          <div style="font-size:0.68rem;color:var(--muted);margin-bottom:3px;">Ensemble <span style="color:var(--blue);">(votes: ${d.votes||'—'})</span></div>
+          ${scoreBar(sc, scoreColor(sc))}
+        </div>
+        <div class="mb-2">
+          <div style="font-size:0.68rem;color:var(--muted);margin-bottom:3px;">Isolation Forest</div>
+          ${scoreBar(ifs, scoreColor(ifs))}
+        </div>
+        <div class="mb-2">
+          <div style="font-size:0.68rem;color:var(--muted);margin-bottom:3px;">Random Forest</div>
+          ${scoreBar(rfs, scoreColor(rfs))}
+        </div>
+        <div class="mb-2">
+          <div style="font-size:0.68rem;color:var(--muted);margin-bottom:3px;">Deep Learning</div>
+          ${scoreBar(dls, scoreColor(dls))}
+        </div>
+      </div>
+
+      <!-- Verdict LLM + MITRE -->
+      <div class="col-md-4">
+        <div style="font-size:0.7rem;color:var(--muted);font-weight:600;margin-bottom:8px;text-transform:uppercase;letter-spacing:.05em;">
+          <i class="fas fa-robot me-1"></i>Analyse LLM / MITRE
+        </div>
+        <div class="mb-2">
+          <div style="font-size:0.68rem;color:var(--muted);margin-bottom:4px;">Verdict LLM</div>
+          ${verdictHtml(d.llm_verdict, d.llm_confidence)}
+        </div>
+        <div class="mb-2 mt-3">
+          <div style="font-size:0.68rem;color:var(--muted);margin-bottom:4px;">Tactique MITRE</div>
+          ${mitreBadge(d.mitre_tactic)}
+        </div>
+        ${d.mitre_technique ? `<div class="mb-2">
+          <div style="font-size:0.68rem;color:var(--muted);margin-bottom:4px;">Technique</div>
+          <span style="font-size:0.72rem;color:var(--text);font-family:monospace;">${esc(d.mitre_technique)}</span>
+        </div>` : ''}
+      </div>
+
+      <!-- CVE + trafic -->
+      <div class="col-md-4">
+        <div style="font-size:0.7rem;color:var(--muted);font-weight:600;margin-bottom:8px;text-transform:uppercase;letter-spacing:.05em;">
+          <i class="fas fa-bug me-1"></i>CVE & Trafic
+        </div>
+        ${cves.length ? `<div class="mb-2">
+          <div style="font-size:0.68rem;color:var(--muted);margin-bottom:5px;">CVEs associées${d.max_cvss ? ` · CVSS max <span style="color:var(--red);font-weight:700">${d.max_cvss}</span>` : ''}</div>
+          <div class="d-flex flex-wrap gap-1">${cves.map(c => `<span class="cve-chip">${esc(c)}</span>`).join('')}</div>
+        </div>` : ''}
+        <div class="mb-2 ${cves.length ? 'mt-2' : ''}">
+          <div style="font-size:0.68rem;color:var(--muted);margin-bottom:4px;">Volume trafic</div>
+          <span style="font-size:0.78rem;color:var(--text);">
+            <span style="color:var(--cyan);font-weight:700;">${d.rate_count||0}</span> req/5min ·
+            <span style="color:${parseInt(d.max_rate_1m||0)>=10?'var(--orange)':'var(--muted)'};font-weight:700;">${d.max_rate_1m||'—'}</span> req/min max
+          </span>
+        </div>
+        <div class="mb-2">
+          <div style="font-size:0.68rem;color:var(--muted);margin-bottom:4px;">Source log</div>
+          ${logTypeBadge(d.log_type)}
+        </div>
+      </div>
+
+    </div>
+  </div>`;
+}
+
+function renderTable() {
+  const filterCat = document.getElementById('filter-cat').value;
+  const rows = filterCat === 'all' ? _allRows : _allRows.filter(r => r._cat === filterCat);
+  document.getElementById('row-count').textContent = `${rows.length} ligne(s)`;
+  const SEV = {critical:'var(--red)',high:'var(--orange)',medium:'var(--yellow)',low:'var(--muted)'};
+
+  if (!rows.length) {
+    document.getElementById('main-tbody').innerHTML =
+      '<tr><td colspan="10" class="empty-state"><i class="fas fa-check-circle me-1" style="color:var(--green)"></i>Aucune détection</td></tr>';
+    return;
+  }
+
+  document.getElementById('main-tbody').innerHTML = rows.map((d, i) => {
+    const sc  = parseFloat(d.ensemble_score||0);
+    const ts  = (d.timestamp||'').slice(0,16).replace('T',' ');
+    const sev = d.severity || 'low';
+    return `
+      <tr class="expand-row" onclick="toggleDetail(${i})" id="row-${i}">
+        <td style="color:var(--muted);font-size:0.7rem;text-align:center;">
+          <i class="fas fa-chevron-right" id="chevron-${i}" style="transition:transform 0.2s;"></i>
+        </td>
+        <td><code style="color:var(--cyan);font-size:0.76rem;">${esc(d.src_ip||'—')}</code></td>
+        <td>${attackBadge(d.attack_type)}</td>
+        <td>${mitreBadge(d.mitre_tactic)}</td>
+        <td>
+          <span style="color:${scoreColor(sc)};font-weight:700;">${sc.toFixed(3)}</span>
+          <div style="width:44px;height:3px;background:var(--bg3);border-radius:2px;margin-top:2px;overflow:hidden;">
+            <div style="height:100%;width:${Math.min(100,sc*100).toFixed(0)}%;background:${scoreColor(sc)};border-radius:2px;"></div>
+          </div>
+        </td>
+        <td style="color:var(--muted)">${d.rate_count||0}</td>
+        <td><span style="color:${SEV[sev]||'var(--muted)'};font-weight:600;font-size:0.72rem">${sev.toUpperCase()}</span></td>
+        <td>${logTypeBadge(d.log_type)}</td>
+        <td class="text-center">${detBadge(d._cat)}</td>
+        <td style="color:var(--muted);font-size:0.72rem">${ts||'—'}</td>
+      </tr>
+      <tr class="detail-row" id="detail-row-${i}">
+        <td colspan="10">${buildDetailHtml(d)}</td>
+      </tr>`;
+  }).join('');
+}
+
+function toggleDetail(i) {
+  const panel   = document.querySelector(`#detail-row-${i} .detail-panel`);
+  const chevron = document.getElementById(`chevron-${i}`);
+  if (!panel) return;
+  const open = panel.classList.toggle('open');
+  chevron.style.transform = open ? 'rotate(90deg)' : '';
+}
+
+async function load() {
+  const w = document.getElementById('sel-window').value;
+  document.getElementById('main-tbody').innerHTML =
+    '<tr><td colspan="10" class="empty-state"><i class="fas fa-spinner fa-spin me-2"></i>Chargement…</td></tr>';
+  try {
+    const d = await fetch(`/api/stealth_compare/detections?window=${w}`).then(r => r.json());
+    if (d.error) throw new Error(d.error);
+
+    const stealth    = (d.stealth    || []).map(x => ({...x, _cat:'ia_only'}));
+    const both       = (d.both || d.detected_both || []).map(x => ({...x, _cat:'both'}));
+    const kibanaOnly = (d.kibana_only || []).map(x => ({...x, _cat:'kb_only'}));
+    _allRows = [...stealth, ...both, ...kibanaOnly]
+      .sort((a,b) => (b.timestamp||'').localeCompare(a.timestamp||''));
+
+    document.getElementById('kpi-ia').textContent    = `IA seul : ${stealth.length}`;
+    document.getElementById('kpi-both').textContent  = `Les deux : ${both.length}`;
+    document.getElementById('kpi-kb').textContent    = `Kibana seul : ${kibanaOnly.length}`;
+    document.getElementById('kpi-total').textContent = `Total : ${_allRows.length}`;
+
+    renderTable();
+  } catch(e) {
+    document.getElementById('main-tbody').innerHTML =
+      `<tr><td colspan="10" style="color:var(--red);padding:20px;">${e.message}</td></tr>`;
+  }
+}
+
+load();
+setInterval(load, 60000);
+</script>
+{% endblock %}

@@ -1,0 +1,1115 @@
+{% extends "base.html" %}
+{% block title %}Alert Management{% endblock %}
+{% block content %}
+
+<style>
+  .siem-table th { cursor: pointer; user-select: none; }
+  .siem-table th:hover { color: var(--blue); }
+  .sort-icon { font-size: 0.65rem; margin-left: 4px; opacity: 0.5; }
+  .status-badge {
+    display: inline-flex; align-items: center; gap: 6px;
+    padding: 5px 14px; border-radius: 20px; font-size: 0.75rem; font-weight: 600;
+  }
+  .status-awaiting { background: rgba(88,166,255,0.1); color: #8b949e; border: 1px solid #30363d; }
+  .status-inprogress { background: rgba(255,166,87,0.1); color: #ffa657; border: 1px solid #ffa657; }
+  .status-closed { background: rgba(63,185,80,0.1); color: #3fb950; border: 1px solid #3fb950; }
+  .verdict-tp { color: #3fb950; font-size: 0.78rem; font-weight: 600; }
+  .verdict-fp { color: #f85149; font-size: 0.78rem; font-weight: 600; }
+  .verdict-none { color: #8b949e; font-size: 0.78rem; }
+  .assigned-banner {
+    background: rgba(88,166,255,0.06);
+    border: 1px dashed var(--blue);
+    border-radius: 8px; padding: 12px 18px;
+    font-size: 0.83rem; color: var(--muted);
+  }
+  .row-expand { display: none; background: #0d1117; }
+  .row-expand.open { display: table-row; }
+  .expand-btn { background: none; border: none; color: var(--muted); cursor: pointer; padding: 2px 6px; }
+  .expand-btn:hover { color: var(--blue); }
+  .edit-btn { background: none; border: none; color: var(--muted); cursor: pointer; padding: 2px 6px; }
+  .edit-btn:hover { color: var(--yellow); }
+  input[type=search] {
+    background: var(--bg3); border: 1px solid var(--border); color: var(--text);
+    border-radius: 20px; padding: 6px 16px 6px 36px; font-size: 0.83rem; width: 260px; outline: none;
+  }
+  input[type=search]:focus { border-color: var(--blue); }
+  .modal-overlay {
+    display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.7); z-index: 1000;
+    align-items: center; justify-content: center;
+  }
+  .modal-overlay.open { display: flex; }
+  .modal-box {
+    background: var(--bg2); border: 1px solid var(--border); border-radius: 12px;
+    padding: 28px; width: 480px; max-width: 95vw;
+  }
+  .form-ctrl {
+    background: var(--bg3); border: 1px solid var(--border); color: var(--text);
+    border-radius: 6px; padding: 6px 10px; font-size: 0.82rem; width: 100%;
+  }
+  .form-ctrl:focus { outline: none; border-color: var(--blue); }
+  .bulk-bar {
+    display: none; align-items: center; gap: 10px; flex-wrap: wrap;
+    background: rgba(88,166,255,0.08); border: 1px solid rgba(88,166,255,0.3);
+    border-radius: 8px; padding: 8px 14px; margin-bottom: 10px;
+  }
+  .bulk-bar.active { display: flex; }
+  .cb-all, .cb-row { accent-color: var(--blue); cursor: pointer; width: 15px; height: 15px; }
+</style>
+
+<!-- Titre + actions -->
+<div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
+  <div>
+    <h5 style="color:var(--text);margin:0;font-weight:700;">
+      <i class="fas fa-ticket-alt me-2" style="color:var(--orange);"></i>Gestion des Incidents
+    </h5>
+    <div style="font-size:0.72rem;color:var(--muted);margin-top:2px;">Triage, analyse et suivi des incidents de sécurité</div>
+  </div>
+  <button onclick="openNew()" class="btn-soc btn-soc-primary">
+    <i class="fas fa-plus"></i>Nouveau incident
+  </button>
+</div>
+
+<!-- Stats KPI bar -->
+<div class="row g-2 mb-3" id="stats-bar">
+  <div class="col-6 col-sm-4 col-md-2">
+    <div class="stat-card" style="background:var(--bg2);padding:12px 14px;">
+      <div class="number" style="font-size:1.6rem;" id="stat-total">—</div>
+      <div class="label"><i class="fas fa-list me-1"></i>Total</div>
+    </div>
+  </div>
+  <div class="col-6 col-sm-4 col-md-2">
+    <div class="stat-card" style="background:var(--bg2);padding:12px 14px;border-color:rgba(88,166,255,0.3);">
+      <div class="number" style="font-size:1.6rem;color:var(--blue);" id="stat-open">—</div>
+      <div class="label"><i class="fas fa-clock me-1"></i>En attente</div>
+    </div>
+  </div>
+  <div class="col-6 col-sm-4 col-md-2">
+    <div class="stat-card" style="background:var(--bg2);padding:12px 14px;border-color:rgba(255,166,87,0.3);">
+      <div class="number" style="font-size:1.6rem;color:var(--orange);" id="stat-inprogress">—</div>
+      <div class="label"><i class="fas fa-spinner me-1"></i>En cours</div>
+    </div>
+  </div>
+  <div class="col-6 col-sm-4 col-md-2">
+    <div class="stat-card" style="background:var(--bg2);padding:12px 14px;border-color:rgba(63,185,80,0.3);">
+      <div class="number" style="font-size:1.6rem;color:var(--green);" id="stat-closed">—</div>
+      <div class="label"><i class="fas fa-check me-1"></i>Fermés</div>
+    </div>
+  </div>
+  <div class="col-6 col-sm-4 col-md-2">
+    <div class="stat-card" style="background:var(--bg2);padding:12px 14px;border-color:rgba(63,185,80,0.3);">
+      <div class="number" style="font-size:1.6rem;color:var(--green);" id="stat-tp-rate">—</div>
+      <div class="label"><i class="fas fa-check-circle me-1"></i>Taux TP</div>
+    </div>
+  </div>
+  <div class="col-6 col-sm-4 col-md-2">
+    <div class="stat-card" style="background:var(--bg2);padding:12px 14px;border-color:rgba(248,81,73,0.3);">
+      <div class="number" style="font-size:1.6rem;color:var(--red);" id="stat-fp-rate">—</div>
+      <div class="label"><i class="fas fa-times-circle me-1"></i>Taux FP</div>
+    </div>
+  </div>
+</div>
+
+<!-- Config auto-incidents -->
+<div class="card-section mb-3" style="padding:16px 20px;">
+  <div class="d-flex justify-content-between align-items-center mb-3">
+    <div class="section-title mb-0"><i class="fas fa-robot me-2"></i>Auto-création d'incidents — Score unifié</div>
+    <div class="d-flex align-items-center gap-2">
+      <span style="font-size:0.75rem; color:var(--muted);">Activé</span>
+      <label class="toggle-switch">
+        <input type="checkbox" id="autoEnabled" checked onchange="saveConfig()">
+        <span class="toggle-slider"></span>
+      </label>
+    </div>
+  </div>
+
+  <!-- Explication échelle unifiée -->
+  <div class="row g-2 mb-3">
+    <div class="col-md-6">
+      <div style="background:var(--bg3); border-radius:8px; padding:10px 14px; font-size:0.76rem;">
+        <div style="color:var(--purple); font-weight:600; margin-bottom:4px;"><i class="fas fa-brain me-1"></i>IA — Isolation Forest</div>
+        Score natif <span style="font-family:monospace;">0.0–1.0</span> → multiplié par 10
+        <span style="color:var(--muted);">(ex: 0.31 → <strong style="color:var(--purple);">3.1/10</strong>)</span>
+      </div>
+    </div>
+    <div class="col-md-6">
+      <div style="background:var(--bg3); border-radius:8px; padding:10px 14px; font-size:0.76rem;">
+        <div style="color:var(--yellow); font-weight:600; margin-bottom:4px;"><i class="fas fa-bug me-1"></i>CVE — NVD CVSS</div>
+        Score CVSS <span style="font-family:monospace;">0–10</span> utilisé directement
+        <span style="color:var(--muted);">(ex: CVSS 9.8 → <strong style="color:var(--yellow);">9.8/10</strong>)</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- Sliders -->
+  <div class="row g-3 align-items-center">
+    <div class="col-md-5">
+      <label style="font-size:0.75rem; color:var(--muted);">
+        Score minimum &nbsp;<span id="minVal" style="color:var(--purple); font-family:monospace; font-weight:600;">2.0</span><span style="color:var(--muted);">/10</span>
+      </label>
+      <input type="range" id="minScore" min="0" max="10" step="0.1" value="2.0"
+        oninput="updateLabels(); markDirty()" style="width:100%; accent-color:var(--purple);">
+    </div>
+    <div class="col-md-5">
+      <label style="font-size:0.75rem; color:var(--muted);">
+        Score maximum &nbsp;<span id="maxVal" style="color:var(--red); font-family:monospace; font-weight:600;">10.0</span><span style="color:var(--muted);">/10</span>
+      </label>
+      <input type="range" id="maxScore" min="0" max="10" step="0.1" value="10.0"
+        oninput="updateLabels(); markDirty()" style="width:100%; accent-color:var(--red);">
+    </div>
+    <div class="col-md-2">
+      <div style="background:var(--bg3); border-radius:8px; padding:10px; text-align:center;">
+        <div style="font-size:0.68rem; color:var(--muted); margin-bottom:4px;">Intervalle actif</div>
+        <div style="font-family:monospace; font-weight:700; font-size:1rem; color:var(--purple);">
+          [<span id="rangeMin">2.0</span> – <span id="rangeMax">10.0</span>]
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Bouton Save -->
+  <div class="d-flex align-items-center gap-3 mt-3">
+    <button id="saveBtn" onclick="saveConfig()" disabled
+      style="background:var(--bg3); color:var(--muted); border:1px solid var(--border); border-radius:8px; padding:7px 20px; font-size:0.83rem; cursor:not-allowed; transition:all .2s;">
+      <i class="fas fa-save me-2"></i>Sauvegarder &amp; appliquer
+    </button>
+    <span id="saveStatus" style="font-size:0.78rem; display:none;"></span>
+  </div>
+
+  <!-- Légende sévérités -->
+  <div class="d-flex gap-3 mt-3" style="font-size:0.72rem;">
+    <span><span class="badge-sev sev-medium">MEDIUM</span> &nbsp;2.0–3.9</span>
+    <span><span class="badge-sev sev-high">HIGH L2</span> &nbsp;4.0–6.9</span>
+    <span><span class="badge-sev sev-high">HIGH L1</span> &nbsp;7.0–8.9</span>
+    <span><span class="badge-sev sev-critical">CRITICAL</span> &nbsp;9.0–10.0</span>
+  </div>
+</div>
+
+<style>
+.toggle-switch { position:relative; display:inline-block; width:36px; height:20px; }
+.toggle-switch input { opacity:0; width:0; height:0; }
+.toggle-slider { position:absolute; cursor:pointer; inset:0; background:var(--bg3); border-radius:20px; border:1px solid var(--border); transition:.3s; }
+.toggle-slider:before { content:""; position:absolute; width:14px; height:14px; left:2px; bottom:2px; background:var(--muted); border-radius:50%; transition:.3s; }
+input:checked + .toggle-slider { background:rgba(63,185,80,0.3); border-color:var(--green); }
+input:checked + .toggle-slider:before { transform:translateX(16px); background:var(--green); }
+</style>
+
+<!-- Assigned alert banner -->
+<div class="assigned-banner mb-3">
+  <strong style="color:var(--blue);">Assigned alert</strong><br>
+  {% if my_alert %}
+    <span style="color:var(--text);">
+      <i class="fas fa-exclamation-circle me-1" style="color:var(--orange);"></i>
+      <strong>{{ my_alert.get('title') }}</strong> — {{ my_alert.get('severity','?')|upper }}
+      — assigné à <strong>{{ my_alert.get('assigned_to') }}</strong> ({{ my_alert.get('level','L1') }})
+    </span>
+  {% else %}
+    You haven't picked up any alerts! Assign yourself to an alert, move it to "In Progress", and start the triage!
+  {% endif %}
+</div>
+
+<!-- Barre de recherche + filtres -->
+<div class="d-flex flex-wrap gap-2 align-items-center mb-3">
+  <div style="position:relative;">
+    <i class="fas fa-search" style="position:absolute; left:12px; top:50%; transform:translateY(-50%); color:var(--muted); font-size:0.78rem;"></i>
+    <input type="search" id="searchInput" placeholder="Search for an alert" oninput="filterTable()">
+  </div>
+  <select id="filterStatus" onchange="filterTable()" class="form-select form-select-sm" style="width:150px;background:var(--bg3);color:var(--text);border-color:var(--border)">
+    <option value="">Tous les statuts</option>
+    <option value="awaiting_action">Awaiting action</option>
+    <option value="in_progress">In Progress</option>
+    <option value="closed">Closed</option>
+  </select>
+  <select id="filterSeverity" onchange="filterTable()" class="form-select form-select-sm" style="width:140px;background:var(--bg3);color:var(--text);border-color:var(--border)">
+    <option value="">Toutes sévérités</option>
+    <option value="critical">Critical</option>
+    <option value="high">High</option>
+    <option value="medium">Medium</option>
+    <option value="low">Low</option>
+  </select>
+  <select id="filterVerdict" onchange="filterTable()" class="form-select form-select-sm" style="width:150px;background:var(--bg3);color:var(--text);border-color:var(--border)">
+    <option value="">Tous verdicts</option>
+    <option value="true_positive">True Positive</option>
+    <option value="false_positive">False Positive</option>
+    <option value="benign">Benign</option>
+    <option value="none">Non défini</option>
+  </select>
+  <button id="myIncBtn" onclick="toggleMyInc()" class="btn-soc" style="font-size:0.78rem;padding:5px 12px;">
+    <i class="fas fa-user me-1"></i>Mes incidents
+  </button>
+  <button onclick="clearFilters()" class="btn-soc" style="font-size:0.78rem;padding:5px 12px;">
+    <i class="fas fa-times me-1"></i>Réinitialiser
+  </button>
+</div>
+
+<!-- Barre actions groupées -->
+<div class="bulk-bar" id="bulkBar">
+  <span style="font-size:0.8rem;color:var(--blue);font-weight:600;">
+    <i class="fas fa-check-square me-1"></i><span id="bulkCount">0</span> sélectionné(s)
+  </span>
+  <button onclick="bulkAction('in_progress')" class="btn-soc" style="font-size:0.75rem;padding:4px 10px;color:var(--orange);border-color:var(--orange);">
+    <i class="fas fa-spinner me-1"></i>Mettre en cours
+  </button>
+  <button onclick="bulkAction('awaiting_action')" class="btn-soc" style="font-size:0.75rem;padding:4px 10px;">
+    <i class="fas fa-clock me-1"></i>Awaiting action
+  </button>
+  <button onclick="bulkAction('close')" class="btn-soc" style="font-size:0.75rem;padding:4px 10px;color:var(--green);border-color:var(--green);">
+    <i class="fas fa-check-circle me-1"></i>Clôturer
+  </button>
+  <div style="display:flex;align-items:center;gap:6px;margin-left:auto;">
+    <input type="text" id="bulkAssignee" placeholder="Assigné à..." class="form-ctrl" style="width:130px;font-size:0.75rem;padding:4px 8px;">
+    <select id="bulkLevel" class="form-ctrl" style="width:70px;font-size:0.75rem;padding:4px 8px;">
+      <option value="L1">L1</option><option value="L2">L2</option><option value="L3">L3</option>
+    </select>
+    <button onclick="bulkAction('assign')" class="btn-soc btn-soc-primary" style="font-size:0.75rem;padding:4px 10px;">
+      <i class="fas fa-user-check me-1"></i>Assigner
+    </button>
+  </div>
+  <button onclick="clearBulkSelection()" class="btn-soc" style="font-size:0.75rem;padding:4px 8px;color:var(--muted);">
+    <i class="fas fa-times"></i>
+  </button>
+</div>
+
+<!-- Table -->
+<div class="card-section" style="padding:0; overflow:hidden;">
+  <table class="table soc-table siem-table mb-0" id="alertTable">
+    <thead>
+      <tr>
+        <th style="width:36px;"><input type="checkbox" class="cb-all" id="cbAll" onchange="toggleAllCheckboxes(this)" title="Tout sélectionner"></th>
+        <th onclick="sortTable(1)">Time <span class="sort-icon">↑↓</span></th>
+        <th onclick="sortTable(2)">Name <span class="sort-icon">↑↓</span></th>
+        <th onclick="sortTable(3)">Severity <span class="sort-icon">↑↓</span></th>
+        <th onclick="sortTable(4)">Status <span class="sort-icon">↑↓</span></th>
+        <th onclick="sortTable(5)">Verdict <span class="sort-icon">↑↓</span></th>
+        <th onclick="sortTable(6)">Assignee</th>
+        <th>Actions</th>
+      </tr>
+    </thead>
+    <tbody>
+    {% for inc in incidents %}
+    {% set sev = inc.get('severity','medium') %}
+    {% set status = inc.get('status','awaiting_action') %}
+    {% set verdict = inc.get('verdict','none') %}
+    <tr class="alert-row" data-id="{{ inc.id }}"
+        data-title="{{ inc.get('title','') }}"
+        data-sev="{{ sev }}"
+        data-status="{{ status }}"
+        data-verdict="{{ verdict }}"
+        data-assignee="{{ inc.get('assigned_to','') }}">
+      <td><input type="checkbox" class="cb-row" value="{{ inc.id }}" onchange="onRowCheck()"></td>
+      <td style="white-space:nowrap; color:var(--muted); font-size:0.78rem;">
+        {{ inc.get('created_at','')|local_ts }}
+      </td>
+      <td style="font-weight:500;">{{ inc.get('title','?') }}</td>
+      <td>
+        <span style="font-weight:600; color:
+          {%- if sev=='critical' %}var(--red)
+          {%- elif sev=='high' %}var(--orange)
+          {%- elif sev=='medium' %}var(--yellow)
+          {%- else %}var(--green){% endif %};">
+          {{ sev|capitalize }}
+        </span>
+      </td>
+      <td>
+        {% if status == 'closed' %}
+          <span class="status-badge status-closed"><i class="fas fa-check-circle"></i>Closed</span>
+        {% elif status == 'in_progress' %}
+          <span class="status-badge status-inprogress"><i class="fas fa-spinner"></i>In Progress</span>
+        {% else %}
+          <span class="status-badge status-awaiting"><i class="fas fa-shield-alt"></i>Awaiting action</span>
+        {% endif %}
+      </td>
+      <td>
+        {% if verdict == 'true_positive' %}
+          <span class="verdict-tp"><i class="fas fa-check me-1"></i>True Positive</span>
+        {% elif verdict == 'false_positive' %}
+          <span class="verdict-fp"><i class="fas fa-times me-1"></i>False Positive</span>
+        {% elif verdict == 'benign' %}
+          <span style="color:var(--blue); font-size:0.78rem; font-weight:600;"><i class="fas fa-info-circle me-1"></i>Benign</span>
+        {% else %}
+          <span class="verdict-none">None</span>
+        {% endif %}
+      </td>
+      <td style="font-size:0.8rem;">
+        {% if inc.get('assigned_to','None') != 'None' and inc.get('assigned_to','') %}
+          {{ inc.get('assigned_to') }}
+          <span style="color:var(--muted); font-size:0.72rem;">({{ inc.get('level','L1') }})</span>
+        {% else %}
+          <span style="color:var(--muted);">None</span>
+        {% endif %}
+      </td>
+      <td style="white-space:nowrap;">
+        <a href="/incidents/{{ inc.id }}" class="btn-soc" style="padding:3px 8px; font-size:0.68rem; display:inline-flex; gap:4px; align-items:center; margin-right:2px;" title="Ouvrir détail">
+          <i class="fas fa-external-link-alt"></i>
+        </a>
+        <button class="edit-btn" onclick="openEdit('{{ inc.id }}','{{ inc.get('title','')|replace("'","") }}','{{ sev }}','{{ status }}','{{ verdict }}','{{ inc.get('assigned_to','') }}','{{ inc.get('level','L1') }}','{{ inc.get('src_ip','') }}')" title="Edit">
+          <i class="fas fa-pencil-alt"></i>
+        </button>
+        <button class="edit-btn" onclick="sendIncidentEmail('{{ inc.id }}', this)" title="Envoyer email de notification" style="color:var(--blue);">
+          <i class="fas fa-envelope"></i>
+        </button>
+        <button class="expand-btn" onclick="toggleExpand('exp-{{ inc.id }}')" title="Expand">
+          <i class="fas fa-chevron-down" id="icon-{{ inc.id }}"></i>
+        </button>
+      </td>
+    </tr>
+    <!-- Ligne détail expandable -->
+    <tr class="row-expand" id="exp-{{ inc.id }}">
+      <td colspan="8" style="padding:16px 24px;">
+        <div class="row g-3" style="font-size:0.8rem;">
+          <div class="col-md-4">
+            <div style="color:var(--muted); margin-bottom:4px;">Type</div>
+            <span class="type-mono">{{ inc.get('type','?') }}</span>
+          </div>
+          {% if inc.get('src_ip') %}
+          <div class="col-md-4">
+            <div style="color:var(--muted); margin-bottom:4px;">IP source</div>
+            <span style="font-family:monospace; color:var(--blue);">{{ inc.get('src_ip') }}</span>
+          </div>
+          {% endif %}
+          <div class="col-md-4">
+            <div style="color:var(--muted); margin-bottom:4px;">Dernière mise à jour</div>
+            {{ inc.get('updated_at','')|local_ts }}
+          </div>
+          {% if inc.get('description') %}
+          <div class="col-12">
+            <div style="color:var(--muted); margin-bottom:4px;">Description</div>
+            <div style="background:var(--bg2); padding:8px 12px; border-radius:6px; color:var(--text);">
+              {{ inc.get('description') }}
+            </div>
+          </div>
+          {% endif %}
+          {% if inc.get('notes') %}
+          <div class="col-12">
+            <div style="color:var(--muted); margin-bottom:6px;">Notes</div>
+            {% for note in inc.get('notes',[]) %}
+            <div style="border-left:2px solid var(--border); padding:4px 10px; margin-bottom:4px; font-size:0.76rem;">
+              <span style="color:var(--blue);">{{ note.get('author','SOC') }}</span>
+              <span style="color:var(--muted);"> · {{ note.get('at','') }}</span>
+              — {{ note.get('text') }}
+            </div>
+            {% endfor %}
+          </div>
+          {% endif %}
+          <!-- AI Analysis panel -->
+          <div class="col-12" id="ai-panel-{{ inc.id }}">
+            <div style="color:var(--purple); margin-bottom:6px; font-size:0.72rem; text-transform:uppercase; letter-spacing:1px;">
+              <i class="fas fa-brain me-1"></i>Analyse IA (llama3)
+            </div>
+            <div id="ai-content-{{ inc.id }}" style="background:var(--bg3); border-radius:8px; padding:12px; border:1px solid var(--border);">
+              <span style="color:var(--muted); font-size:0.78rem;"><i class="fas fa-circle-notch fa-spin me-1"></i>Chargement…</span>
+            </div>
+          </div>
+        </div>
+      </td>
+    </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</div>
+
+<div style="font-size:0.78rem; color:var(--muted); margin-top:10px;" id="displayCount">
+  Displaying <strong>{{ (page-1)*size + 1 }}–{{ (page-1)*size + incidents|length }}</strong> of <strong>{{ total }}</strong> records
+  &nbsp;·&nbsp; Page {{ page }}/{{ total_pages }}
+</div>
+
+<!-- Pagination serveur -->
+{% if total_pages > 1 %}
+<div class="d-flex align-items-center gap-2 mt-2 flex-wrap" style="font-size:0.82rem;">
+  {% if page > 1 %}
+  <a href="{{ url_for('incidents_page', page=page-1, size=size, severity=f_sev, status=f_stat, verdict=f_verd, q=f_q) }}"
+     class="btn-soc" style="padding:4px 12px;">
+    <i class="fas fa-chevron-left me-1"></i>Précédente
+  </a>
+  {% endif %}
+
+  {% for p in range([1, page-2]|max, [total_pages+1, page+3]|min) %}
+    <a href="{{ url_for('incidents_page', page=p, size=size, severity=f_sev, status=f_stat, verdict=f_verd, q=f_q) }}"
+       class="btn-soc {% if p==page %}btn-soc-primary{% endif %}" style="padding:4px 10px;min-width:36px;justify-content:center;">{{ p }}</a>
+  {% endfor %}
+
+  {% if page < total_pages %}
+  <a href="{{ url_for('incidents_page', page=page+1, size=size, severity=f_sev, status=f_stat, verdict=f_verd, q=f_q) }}"
+     class="btn-soc" style="padding:4px 12px;">
+    Suivante <i class="fas fa-chevron-right ms-1"></i>
+  </a>
+  {% endif %}
+
+  <select onchange="location.href='{{ url_for('incidents_page', severity=f_sev, status=f_stat, verdict=f_verd, q=f_q) }}&page=1&size='+this.value"
+    style="background:var(--bg3);border:1px solid var(--border);color:var(--text);border-radius:6px;padding:4px 8px;font-size:0.78rem;">
+    {% for s in [25, 50, 100] %}
+      <option value="{{ s }}" {% if s==size %}selected{% endif %}>{{ s }}/page</option>
+    {% endfor %}
+  </select>
+</div>
+{% endif %}
+
+<!-- ─── Modal Nouvelle alerte ─── -->
+<div class="modal-overlay" id="modalNew">
+  <div class="modal-box">
+    <div class="d-flex justify-content-between align-items-center mb-3">
+      <h6 style="color:var(--blue); margin:0;"><i class="fas fa-plus me-2"></i>Nouvelle alerte</h6>
+      <button onclick="closeModal('modalNew')" style="background:none;border:none;color:var(--muted);font-size:1.2rem;cursor:pointer;">×</button>
+    </div>
+    <form method="POST" action="/incidents/new">
+      <div class="mb-2">
+        <label style="font-size:0.75rem; color:var(--muted);">Nom *</label>
+        <input type="text" name="title" class="form-ctrl mt-1" required placeholder="ex: Bruteforce Attack from External">
+      </div>
+      <div class="row g-2 mb-2">
+        <div class="col-6">
+          <label style="font-size:0.75rem; color:var(--muted);">Sévérité</label>
+          <select name="severity" class="form-ctrl mt-1">
+            <option value="critical">Critical</option>
+            <option value="high">High</option>
+            <option value="medium" selected>Medium</option>
+            <option value="low">Low</option>
+          </select>
+        </div>
+        <div class="col-6">
+          <label style="font-size:0.75rem; color:var(--muted);">Type</label>
+          <select name="itype" class="form-ctrl mt-1">
+            <option value="brute_force">Brute Force SSH</option>
+            <option value="web_attack">Web Attack</option>
+            <option value="ids_alert">IDS Alert</option>
+            <option value="anomaly_ia">IA Anomaly</option>
+            <option value="cve">CVE Critical</option>
+            <option value="scan">Network Scan</option>
+            <option value="autre">Other</option>
+          </select>
+        </div>
+      </div>
+      <div class="row g-2 mb-2">
+        <div class="col-8">
+          <label style="font-size:0.75rem; color:var(--muted);">Assigné à</label>
+          <input type="text" name="assigned" class="form-ctrl mt-1" placeholder="ex: T.Ross">
+        </div>
+        <div class="col-4">
+          <label style="font-size:0.75rem; color:var(--muted);">Niveau</label>
+          <select name="level" class="form-ctrl mt-1">
+            <option value="L1">L1</option>
+            <option value="L2">L2</option>
+            <option value="L3">L3</option>
+          </select>
+        </div>
+      </div>
+      <div class="mb-2">
+        <label style="font-size:0.75rem; color:var(--muted);">IP source</label>
+        <input type="text" name="src_ip" class="form-ctrl mt-1" placeholder="ex: 192.168.50.30">
+      </div>
+      <div class="mb-3">
+        <label style="font-size:0.75rem; color:var(--muted);">Description</label>
+        <textarea name="description" rows="2" class="form-ctrl mt-1" placeholder="Détails..."></textarea>
+      </div>
+      <div class="d-flex gap-2 justify-content-end">
+        <button type="button" onclick="closeModal('modalNew')" class="btn-soc">Annuler</button>
+        <button type="submit" class="btn-soc btn-soc-primary">Créer</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- ─── Modal Édition alerte ─── -->
+<div class="modal-overlay" id="modalEdit">
+  <div class="modal-box">
+    <div class="d-flex justify-content-between align-items-center mb-3">
+      <h6 style="color:var(--yellow); margin:0;"><i class="fas fa-pencil-alt me-2"></i>Modifier l'alerte</h6>
+      <button onclick="closeModal('modalEdit')" style="background:none;border:none;color:var(--muted);font-size:1.2rem;cursor:pointer;">×</button>
+    </div>
+    <form method="POST" id="editForm" action="">
+      <div class="mb-2">
+        <label style="font-size:0.75rem; color:var(--muted);">Nom</label>
+        <div id="editTitle" style="font-size:0.88rem; color:var(--text); padding:6px 0;"></div>
+      </div>
+      <div class="row g-2 mb-2">
+        <div class="col-6">
+          <label style="font-size:0.75rem; color:var(--muted);">Statut</label>
+          <select name="status" class="form-ctrl mt-1" id="editStatus">
+            <option value="awaiting_action">Awaiting action</option>
+            <option value="in_progress">In Progress</option>
+            <option value="closed">Closed</option>
+          </select>
+        </div>
+        <div class="col-6">
+          <label style="font-size:0.75rem; color:var(--muted);">Verdict</label>
+          <select name="verdict" class="form-ctrl mt-1" id="editVerdict">
+            <option value="none">None</option>
+            <option value="true_positive">True Positive</option>
+            <option value="false_positive">False Positive</option>
+            <option value="benign">Benign</option>
+          </select>
+        </div>
+      </div>
+      <div class="row g-2 mb-2">
+        <div class="col-8">
+          <label style="font-size:0.75rem; color:var(--muted);">Assigné à</label>
+          <input type="text" name="assigned_to" class="form-ctrl mt-1" id="editAssignee">
+        </div>
+        <div class="col-4">
+          <label style="font-size:0.75rem; color:var(--muted);">Niveau</label>
+          <select name="level" class="form-ctrl mt-1" id="editLevel">
+            <option value="L1">L1</option>
+            <option value="L2">L2</option>
+            <option value="L3">L3</option>
+          </select>
+        </div>
+      </div>
+      <div class="mb-3">
+        <label style="font-size:0.75rem; color:var(--muted);">Ajouter une note</label>
+        <textarea name="note" rows="2" class="form-ctrl mt-1" placeholder="Note de triage..."></textarea>
+      </div>
+      <div class="d-flex gap-2 justify-content-end">
+        <button type="button" onclick="closeModal('modalEdit')" class="btn-soc">Annuler</button>
+        <button type="submit" class="btn-soc btn-soc-primary">Enregistrer</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<script>
+function openNew() { document.getElementById('modalNew').classList.add('open'); }
+function closeModal(id) { document.getElementById(id).classList.remove('open'); }
+
+function openEdit(id, title, sev, status, verdict, assignee, level, srcip) {
+  document.getElementById('editForm').action = '/incidents/' + id + '/update';
+  document.getElementById('editTitle').textContent = title;
+  document.getElementById('editStatus').value = status;
+  document.getElementById('editVerdict').value = verdict;
+  document.getElementById('editAssignee').value = assignee === 'None' ? '' : assignee;
+  document.getElementById('editLevel').value = level;
+  document.getElementById('modalEdit').classList.add('open');
+}
+
+function toggleExpand(rowId) {
+  const row = document.getElementById(rowId);
+  const incId = rowId.replace('exp-', '');
+  const icon = document.getElementById('icon-' + incId);
+  const wasOpen = row.classList.contains('open');
+  row.classList.toggle('open');
+  icon.classList.toggle('fa-chevron-down');
+  icon.classList.toggle('fa-chevron-up');
+  if (!wasOpen) fetchAnalysis(incId);
+}
+
+const _aiPollers = {};
+
+async function fetchAnalysis(incId) {
+  const el = document.getElementById('ai-content-' + incId);
+  if (!el) return;
+  try {
+    const r = await fetch('/api/incidents/' + incId + '/analysis');
+    const d = await r.json();
+    if (d.status === 'pending') {
+      el.innerHTML = '<span style="color:var(--muted);font-size:0.78rem;"><i class="fas fa-circle-notch fa-spin me-1"></i>Analyse IA en cours… (llama3)</span>';
+      if (!_aiPollers[incId]) {
+        _aiPollers[incId] = setInterval(() => {
+          fetch('/api/incidents/' + incId + '/analysis').then(r => r.json()).then(d2 => {
+            if (d2.status === 'ready') {
+              clearInterval(_aiPollers[incId]);
+              delete _aiPollers[incId];
+              renderAnalysis(incId, d2.analysis);
+            }
+          }).catch(() => {});
+        }, 5000);
+      }
+    } else if (d.status === 'ready') {
+      renderAnalysis(incId, d.analysis);
+    } else {
+      el.innerHTML = '<span style="color:var(--muted);font-size:0.78rem;">Analyse non disponible.</span>';
+    }
+  } catch(e) {
+    el.innerHTML = '<span style="color:var(--red);font-size:0.78rem;">Erreur: ' + e.message + '</span>';
+  }
+}
+
+function renderAnalysis(incId, a) {
+  const el = document.getElementById('ai-content-' + incId);
+  if (!el || !a) return;
+
+  const verdictColor = a.verdict === 'true_positive'  ? 'var(--red)'
+                     : a.verdict === 'false_positive' ? 'var(--green)'
+                     : 'var(--yellow)';
+  const verdictLabel = a.verdict === 'true_positive'  ? 'VRAI POSITIF'
+                     : a.verdict === 'false_positive' ? 'FAUX POSITIF'
+                     : 'INCERTAIN';
+  const threatColor  = a.threat_level === 'critique' ? 'var(--red)'
+                     : a.threat_level === 'haute'    ? 'var(--orange)'
+                     : a.threat_level === 'moyenne'  ? 'var(--yellow)'
+                     : 'var(--green)';
+  const confPct      = Math.round((a.confidence || 0) * 100);
+  const confColor    = confPct >= 75 ? 'var(--red)' : confPct >= 50 ? 'var(--orange)' : 'var(--yellow)';
+
+  const evidence = (a.evidence || []).map(e =>
+    `<li style="font-size:0.76rem;margin-bottom:2px;">${esc(e)}</li>`).join('');
+  const actions = (a.actions || []).map(ac =>
+    `<li style="font-size:0.76rem;margin-bottom:2px;">${esc(ac)}</li>`).join('');
+
+  el.innerHTML = `
+    <div class="row g-2">
+      <div class="col-md-4">
+        <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px;">
+          <span style="background:${verdictColor}22;color:${verdictColor};font-size:0.7rem;font-weight:700;
+                       padding:3px 10px;border-radius:12px;letter-spacing:1px;">${esc(verdictLabel)}</span>
+          <span style="background:${threatColor}22;color:${threatColor};font-size:0.7rem;font-weight:700;
+                       padding:3px 10px;border-radius:12px;">${esc((a.threat_level||'').toUpperCase())}</span>
+        </div>
+        <div style="font-size:0.8rem;font-weight:600;color:var(--purple);margin-bottom:4px;">${esc(a.attack_type||'')}</div>
+        <div style="font-size:0.76rem;color:var(--text);margin-bottom:8px;">${esc(a.summary||'')}</div>
+        ${a.false_positive_reason ? `<div style="font-size:0.74rem;color:var(--green);background:rgba(63,185,80,0.08);border-radius:6px;padding:4px 8px;">${esc(a.false_positive_reason)}</div>` : ''}
+        <div style="font-size:0.72rem;color:var(--muted);margin-top:6px;">
+          <i class="fas fa-robot me-1"></i>${esc(a.model||'llama3')}
+          &nbsp;·&nbsp; ${toLocalShort(a.analyzed_at)}
+          &nbsp;·&nbsp; ${a.logs_used||0} logs
+        </div>
+      </div>
+      <div class="col-md-3">
+        <div style="font-size:0.7rem;color:var(--muted);text-transform:uppercase;letter-spacing:1px;margin-bottom:6px;">Confiance</div>
+        <div style="font-size:1.6rem;font-weight:700;color:${confColor};">${confPct}%</div>
+        <div style="background:var(--bg2);border-radius:4px;height:6px;margin-top:4px;border:1px solid var(--border);">
+          <div style="height:100%;width:${confPct}%;background:${confColor};border-radius:4px;transition:width .5s;"></div>
+        </div>
+        <div style="font-size:0.72rem;color:var(--muted);margin-top:8px;">Intent:</div>
+        <div style="font-size:0.76rem;color:var(--text);">${esc(a.attacker_intent||'')}</div>
+      </div>
+      <div class="col-md-2">
+        <div style="font-size:0.7rem;color:var(--muted);text-transform:uppercase;letter-spacing:1px;margin-bottom:6px;">Preuves</div>
+        <ul style="list-style:disc;padding-left:16px;margin:0;">${evidence}</ul>
+      </div>
+      <div class="col-md-3">
+        <div style="font-size:0.7rem;color:var(--muted);text-transform:uppercase;letter-spacing:1px;margin-bottom:6px;">Actions recommandées</div>
+        <ul style="list-style:disc;padding-left:16px;margin:0;">${actions}</ul>
+      </div>
+    </div>`;
+}
+
+function esc(s) {
+  return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+let _myIncActive = false;
+let _currentUserName = '';
+
+fetch('/api/current_user').then(r => r.json()).then(u => {
+  if (u.authenticated) _currentUserName = u.name;
+}).catch(() => {});
+
+function toggleMyInc() {
+  _myIncActive = !_myIncActive;
+  const btn = document.getElementById('myIncBtn');
+  btn.style.borderColor  = _myIncActive ? 'var(--blue)' : 'var(--border)';
+  btn.style.color        = _myIncActive ? 'var(--blue)' : 'var(--text)';
+  btn.style.background   = _myIncActive ? 'rgba(88,166,255,0.1)' : 'var(--bg3)';
+  filterTable();
+}
+
+function filterTable() {
+  const q       = document.getElementById('searchInput').value.toLowerCase();
+  const status  = document.getElementById('filterStatus').value;
+  const sev     = document.getElementById('filterSeverity').value;
+  const verdict = document.getElementById('filterVerdict').value;
+  const rows    = document.querySelectorAll('.alert-row');
+  let visible   = 0;
+  rows.forEach(row => {
+    const text = row.dataset.title.toLowerCase() + row.dataset.sev + row.dataset.status + (row.dataset.verdict || '');
+    const matchQ        = !q       || text.includes(q);
+    const matchStatus   = !status  || row.dataset.status  === status;
+    const matchSev      = !sev     || row.dataset.sev     === sev;
+    const matchVerdict  = !verdict || row.dataset.verdict === verdict;
+    const matchMyInc    = !_myIncActive || row.dataset.assignee === _currentUserName;
+    const show = matchQ && matchStatus && matchSev && matchVerdict && matchMyInc;
+    row.style.display = show ? '' : 'none';
+    const exp = document.getElementById('exp-' + row.dataset.id);
+    if (exp) exp.style.display = show ? '' : 'none';
+    if (!show) {
+      const cb = row.querySelector('.cb-row');
+      if (cb) cb.checked = false;
+    }
+    if (show) visible++;
+  });
+  document.getElementById('displayCount').innerHTML =
+    'Displaying <strong>1 - ' + visible + '</strong> of <strong>' + visible + '</strong> records';
+  onRowCheck();
+}
+
+function clearFilters() {
+  document.getElementById('searchInput').value      = '';
+  document.getElementById('filterStatus').value     = '';
+  document.getElementById('filterSeverity').value   = '';
+  document.getElementById('filterVerdict').value    = '';
+  _myIncActive = false;
+  const btn = document.getElementById('myIncBtn');
+  btn.style.borderColor = 'var(--border)';
+  btn.style.color       = 'var(--text)';
+  btn.style.background  = 'var(--bg3)';
+  filterTable();
+}
+
+async function loadStats() {
+  try {
+    const r = await fetch('/api/incidents/stats');
+    const s = await r.json();
+    document.getElementById('stat-total').textContent      = s.total      ?? '—';
+    document.getElementById('stat-open').textContent       = s.awaiting   ?? '—';
+    document.getElementById('stat-inprogress').textContent = s.in_progress ?? '—';
+    document.getElementById('stat-closed').textContent     = s.closed     ?? '—';
+    const tpRate = s.tp_rate != null ? (s.tp_rate * 100).toFixed(0) + '%' : '—';
+    const fpRate = s.fp_rate != null ? (s.fp_rate * 100).toFixed(0) + '%' : '—';
+    document.getElementById('stat-tp-rate').textContent    = tpRate;
+    document.getElementById('stat-fp-rate').textContent    = fpRate;
+  } catch(e) { console.error('loadStats error:', e); }
+}
+
+loadStats();
+
+let sortDir = {};
+function sortTable(col) {
+  const tbody = document.querySelector('#alertTable tbody');
+  const rows = Array.from(document.querySelectorAll('.alert-row'));
+  sortDir[col] = !sortDir[col];
+  rows.sort((a, b) => {
+    const vals = [
+      [a,b].map(r => r.cells[col]?.textContent.trim() || '')
+    ][0];
+    return sortDir[col] ? vals[0].localeCompare(vals[1]) : vals[1].localeCompare(vals[0]);
+  });
+  rows.forEach(r => {
+    tbody.appendChild(r);
+    const exp = document.getElementById('exp-' + r.dataset.id);
+    if (exp) tbody.appendChild(exp);
+  });
+}
+
+// Fermer modal en cliquant dehors
+document.querySelectorAll('.modal-overlay').forEach(m => {
+  m.addEventListener('click', e => { if (e.target === m) m.classList.remove('open'); });
+});
+
+// Config auto-incidents
+function updateLabels() {
+  const min = parseFloat(document.getElementById('minScore').value);
+  const max = parseFloat(document.getElementById('maxScore').value);
+  document.getElementById('minVal').textContent   = min.toFixed(1);
+  document.getElementById('maxVal').textContent   = max.toFixed(1);
+  document.getElementById('rangeMin').textContent = min.toFixed(1);
+  document.getElementById('rangeMax').textContent = max.toFixed(1);
+}
+
+function markDirty() {
+  const btn = document.getElementById('saveBtn');
+  btn.disabled = false;
+  btn.style.background   = 'var(--blue)';
+  btn.style.color        = '#fff';
+  btn.style.borderColor  = 'var(--blue)';
+  btn.style.cursor       = 'pointer';
+  const s = document.getElementById('saveStatus');
+  s.style.display = 'none';
+}
+
+function saveConfig() {
+  const min     = parseFloat(document.getElementById('minScore').value);
+  const max     = parseFloat(document.getElementById('maxScore').value);
+  const enabled = document.getElementById('autoEnabled').checked;
+  const btn     = document.getElementById('saveBtn');
+  const status  = document.getElementById('saveStatus');
+
+  btn.disabled  = true;
+  btn.innerHTML = '<i class="fas fa-spinner fa-spin me-2"></i>Sauvegarde...';
+
+  fetch('/api/incident_config', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({enabled, min_score: min, max_score: max})
+  }).then(r => r.json()).then(cfg => {
+    btn.style.background  = 'var(--green)';
+    btn.style.borderColor = 'var(--green)';
+    btn.style.color       = '#fff';
+    btn.innerHTML         = '<i class="fas fa-check me-2"></i>Appliqué !';
+
+    status.style.display = 'inline';
+    status.style.color   = 'var(--green)';
+    status.innerHTML     = `Filtre actif : <strong style="font-family:monospace;">[${cfg.min_score} – ${cfg.max_score}]</strong> — seuls les scores dans cet intervalle créent un incident.`;
+
+    // Reset bouton après 2s et refresh table
+    setTimeout(() => {
+      btn.style.background  = 'var(--bg3)';
+      btn.style.borderColor = 'var(--border)';
+      btn.style.color       = 'var(--muted)';
+      btn.style.cursor      = 'not-allowed';
+      btn.innerHTML         = '<i class="fas fa-save me-2"></i>Sauvegarder &amp; appliquer';
+    }, 2000);
+  }).catch(() => {
+    btn.style.background  = 'var(--red)';
+    btn.innerHTML         = '<i class="fas fa-times me-2"></i>Erreur';
+    btn.disabled          = false;
+  });
+}
+
+// Toggle activé/désactivé → sauvegarde immédiate (pas de dirty)
+document.getElementById('autoEnabled').addEventListener('change', () => {
+  const enabled = document.getElementById('autoEnabled').checked;
+  const min     = parseFloat(document.getElementById('minScore').value);
+  const max     = parseFloat(document.getElementById('maxScore').value);
+  fetch('/api/incident_config', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({enabled, min_score: min, max_score: max})
+  });
+});
+
+// Charger config au démarrage
+fetch('/api/incident_config').then(r => r.json()).then(cfg => {
+  document.getElementById('minScore').value      = cfg.min_score;
+  document.getElementById('maxScore').value      = cfg.max_score;
+  document.getElementById('autoEnabled').checked = cfg.enabled;
+  updateLabels();
+
+  // Afficher le filtre actif au chargement
+  const s = document.getElementById('saveStatus');
+  s.style.display = 'inline';
+  s.style.color   = 'var(--muted)';
+  s.innerHTML     = `Filtre actif : <strong style="font-family:monospace;">[${cfg.min_score} – ${cfg.max_score}]</strong>`;
+});
+
+// Auto-refresh counter badge in navbar every 30s without disrupting modals/sliders
+setInterval(async () => {
+  try {
+    const r = await fetch('/api/analytics/overview');
+    const d = await r.json();
+    const el = document.querySelector('#st-alerts, [id*="alerts"]');
+    // update open incident count in page title silently
+    document.title = `Alert Management (${d.incidents_open ?? '?'} open)`;
+  } catch(e) {}
+}, 30000);
+
+function getSelectedIds() {
+  return [...document.querySelectorAll('.cb-row:checked')].map(cb => cb.value);
+}
+
+function onRowCheck() {
+  const selected = getSelectedIds();
+  const bar = document.getElementById('bulkBar');
+  const countEl = document.getElementById('bulkCount');
+  countEl.textContent = selected.length;
+  bar.classList.toggle('active', selected.length > 0);
+  const cbAll = document.getElementById('cbAll');
+  const allCbs = document.querySelectorAll('.cb-row:not([style*="none"])');
+  cbAll.indeterminate = selected.length > 0 && selected.length < allCbs.length;
+  cbAll.checked = selected.length === allCbs.length && allCbs.length > 0;
+}
+
+function toggleAllCheckboxes(cbAll) {
+  const rows = document.querySelectorAll('.alert-row');
+  rows.forEach(row => {
+    if (row.style.display === 'none') return;
+    const cb = row.querySelector('.cb-row');
+    if (cb) cb.checked = cbAll.checked;
+  });
+  onRowCheck();
+}
+
+function clearBulkSelection() {
+  document.querySelectorAll('.cb-row').forEach(cb => cb.checked = false);
+  document.getElementById('cbAll').checked = false;
+  document.getElementById('cbAll').indeterminate = false;
+  document.getElementById('bulkBar').classList.remove('active');
+}
+
+async function bulkAction(action) {
+  const ids = getSelectedIds();
+  if (!ids.length) return;
+
+  const actionLabels = {
+    'close': 'Clôturer',
+    'in_progress': 'mettre En cours',
+    'awaiting_action': 'mettre en Awaiting',
+    'assign': 'Assigner',
+  };
+  if (!confirm(`${actionLabels[action] || action} ${ids.length} incident(s) ?`)) return;
+
+  const body = {action, ids};
+  if (action === 'assign') {
+    body.assignee = document.getElementById('bulkAssignee').value.trim();
+    body.level    = document.getElementById('bulkLevel').value;
+    if (!body.assignee) { alert('Veuillez saisir un assigné.'); return; }
+  }
+
+  try {
+    const r = await fetch('/api/incidents/bulk_action', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify(body)
+    });
+    const d = await r.json();
+    if (r.ok) {
+      clearBulkSelection();
+      setTimeout(() => location.reload(), 600);
+    } else {
+      alert('Erreur: ' + (d.error || 'inconnue'));
+    }
+  } catch(e) {
+    alert('Erreur réseau: ' + e.message);
+  }
+}
+
+async function sendIncidentEmail(incId, btn) {
+  const icon = btn.querySelector('i');
+  const orig = icon.className;
+  icon.className = 'fas fa-spinner fa-spin';
+  btn.disabled = true;
+  try {
+    const r = await fetch(`/api/incidents/${incId}/send_email`, {method:'POST'});
+    const d = await r.json();
+    if (r.ok && d.status === 'ok') {
+      icon.className = 'fas fa-check';
+      btn.style.color = 'var(--green)';
+      btn.title = d.message;
+      setTimeout(() => { icon.className = orig; btn.style.color = 'var(--blue)'; btn.disabled = false; btn.title = 'Envoyer email de notification'; }, 3000);
+    } else {
+      icon.className = 'fas fa-times';
+      btn.style.color = 'var(--red)';
+      btn.title = d.message || d.error || 'Erreur envoi';
+      setTimeout(() => { icon.className = orig; btn.style.color = 'var(--blue)'; btn.disabled = false; btn.title = 'Envoyer email de notification'; }, 3000);
+    }
+  } catch(e) {
+    icon.className = orig; btn.disabled = false;
+  }
+}
+
+// ── LIVE POLLING — Détection temps réel (toutes les 5s) ──────────
+(function() {
+  const SEV_COLOR = { critical:'#f85149', high:'#ff7b72', medium:'#e3b341', low:'#3fb950' };
+  const SEV_ORDER = { critical:0, high:1, medium:2, low:3 };
+
+  let latestTs = (() => {
+    const rows = document.querySelectorAll('.alert-row');
+    if (!rows.length) return new Date(0).toISOString();
+    let max = new Date(0);
+    rows.forEach(r => {
+      const ts = r.dataset.created || '';
+      if (ts && new Date(ts) > max) max = new Date(ts);
+    });
+    return max.toISOString();
+  })();
+
+  const knownIds = new Set([...document.querySelectorAll('.alert-row')].map(r => r.dataset.id));
+  const tbody    = document.querySelector('#alertTable tbody');
+  const liveText = document.querySelector('.live-dot')?.parentElement;
+
+  function sevBadge(sev) {
+    const c = SEV_COLOR[sev] || '#8b949e';
+    return `<span style="font-weight:600;color:${c};">${sev.charAt(0).toUpperCase()+sev.slice(1)}</span>`;
+  }
+
+  function buildRow(inc) {
+    const ts    = toLocalShort(inc.created_at);
+    const sev   = (inc.severity||'medium').toLowerCase();
+    const color = SEV_COLOR[sev] || '#8b949e';
+    return `
+<tr class="alert-row new-incident-flash" data-id="${inc.id}"
+    data-title="${(inc.title||'').replace(/"/g,'')}"
+    data-sev="${sev}" data-status="${inc.status||'awaiting_action'}"
+    data-verdict="${inc.verdict||'none'}" data-assignee="${inc.assigned_to||''}"
+    data-srcip="${inc.src_ip||''}" data-type="${inc.type||''}"
+    data-created="${inc.created_at||''}" data-level="${inc.level||'L1'}">
+  <td><input type="checkbox" class="cb-row" value="${inc.id}" onchange="onRowCheck()"></td>
+  <td style="white-space:nowrap;color:var(--muted);font-size:0.78rem;">${ts}</td>
+  <td style="font-weight:500;">
+    <span style="display:inline-flex;align-items:center;gap:6px;">
+      <span style="width:8px;height:8px;border-radius:50%;background:${color};display:inline-block;animation:pulse 1s infinite;flex-shrink:0;"></span>
+      ${inc.title||'Incident'}
+    </span>
+    <div style="font-size:0.72rem;color:var(--muted);margin-top:2px;">${inc.src_ip||''}</div>
+  </td>
+  <td>${sevBadge(sev)}</td>
+  <td><span class="status-badge status-awaiting"><i class="fas fa-shield-alt"></i> Awaiting</span></td>
+  <td><span class="verdict-none">None</span></td>
+  <td style="font-size:0.8rem;">${inc.assigned_to||'<span style="color:var(--muted)">—</span>'}</td>
+  <td style="white-space:nowrap;">
+    <a href="/incidents/${inc.id}" class="btn-soc"
+       style="padding:3px 10px;font-size:0.72rem;display:inline-flex;gap:4px;align-items:center;background:rgba(248,81,73,.15);border-color:rgba(248,81,73,.4);color:#f85149;">
+      <i class="fas fa-external-link-alt"></i> Voir
+    </a>
+  </td>
+</tr>
+<tr class="row-expand" id="exp-${inc.id}"><td colspan="8"></td></tr>`;
+  }
+
+  function flashBanner(count, sev) {
+    let banner = document.getElementById('live-new-banner');
+    if (!banner) {
+      banner = document.createElement('div');
+      banner.id = 'live-new-banner';
+      banner.style.cssText =
+        'position:fixed;top:66px;right:22px;z-index:9999;background:#f85149;color:#fff;' +
+        'padding:12px 20px;border-radius:10px;font-weight:700;font-size:0.95rem;' +
+        'box-shadow:0 4px 20px rgba(248,81,73,.5);display:flex;align-items:center;' +
+        'gap:10px;cursor:pointer;transition:opacity .3s;';
+      banner.innerHTML = '<i class="fas fa-radiation-alt fa-beat"></i> <span id="banner-text"></span>';
+      banner.onclick = () => { banner.style.opacity='0'; setTimeout(()=>banner.remove(),300); };
+      document.body.appendChild(banner);
+    }
+    const c = SEV_COLOR[sev] || '#f85149';
+    banner.style.background = c;
+    banner.style.boxShadow  = `0 4px 20px ${c}80`;
+    document.getElementById('banner-text').textContent =
+      `${count} NOUVEL${count>1?'S':''} INCIDENT${count>1?'S':''} DÉTECTÉ${count>1?'S':''}`;
+    banner.style.opacity = '1';
+    const orig = document.title;
+    document.title = `🚨 ${count} INCIDENT${count>1?'S':''} — Mini-SOC`;
+    setTimeout(() => { document.title = orig; }, 5000);
+    setTimeout(() => {
+      if (banner.parentNode) { banner.style.opacity='0'; setTimeout(()=>banner.remove(),300); }
+    }, 8000);
+  }
+
+  async function pollLive() {
+    try {
+      const r   = await fetch(`/api/incidents/live?since=${encodeURIComponent(latestTs)}&size=10`);
+      if (!r.ok) return;
+      const d   = await r.json();
+      const nov = (d.incidents || []).filter(inc => !knownIds.has(inc.id));
+      if (nov.length === 0) return;
+
+      latestTs = d.latest_ts || latestTs;
+      nov.sort((a,b) => {
+        const ds = (SEV_ORDER[a.severity]||2) - (SEV_ORDER[b.severity]||2);
+        return ds !== 0 ? ds : new Date(b.created_at) - new Date(a.created_at);
+      });
+
+      const tmp = document.createElement('tbody');
+      nov.forEach(inc => {
+        knownIds.add(inc.id);
+        tmp.innerHTML = buildRow(inc);
+        [...tmp.children].forEach(n => tbody.insertBefore(n, tbody.firstChild));
+      });
+
+      setTimeout(() => {
+        document.querySelectorAll('.new-incident-flash').forEach(r => r.classList.remove('new-incident-flash'));
+      }, 5000);
+
+      flashBanner(nov.length, nov[0].severity);
+
+      if (liveText) {
+        liveText.innerHTML =
+          `<span class="live-dot"></span>Live · <span style="color:var(--green);font-weight:600;">+${nov.length} nouveau${nov.length>1?'x':''}</span>`;
+        setTimeout(() => {
+          if (liveText) liveText.innerHTML = '<span class="live-dot"></span>Live · 5s';
+        }, 6000);
+      }
+    } catch(e) { /* silencieux */ }
+  }
+
+  const styleEl = document.createElement('style');
+  styleEl.textContent = `
+    @keyframes incFlash {
+      0%   { background:rgba(248,81,73,.30); box-shadow:inset 3px 0 0 #f85149; }
+      60%  { background:rgba(248,81,73,.10); }
+      100% { background:transparent; box-shadow:none; }
+    }
+    .new-incident-flash td { animation:incFlash 1.5s ease 3; }
+  `;
+  document.head.appendChild(styleEl);
+
+  setInterval(pollLive, 5000);
+})();
+</script>
+{% endblock %}

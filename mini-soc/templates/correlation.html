@@ -1,0 +1,226 @@
+{% extends "base.html" %}
+{% block title %}Corrélation{% endblock %}
+{% block content %}
+<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;flex-wrap:wrap;gap:10px;">
+  <div>
+    <h2 style="font-size:1.1rem;font-weight:700;color:var(--text2);margin:0;">
+      <i class="fas fa-project-diagram me-2" style="color:var(--cyan);"></i>Corrélation des incidents
+    </h2>
+    <p style="font-size:0.75rem;color:var(--muted);margin:4px 0 0;">Regroupement par IP, campagnes et heatmap d'activité</p>
+  </div>
+  <div style="display:flex;gap:8px;align-items:center;">
+    <select id="sel-hours" class="form-select" style="font-size:0.78rem;padding:6px 10px;width:auto;" onchange="loadAll()">
+      <option value="24">24 heures</option>
+      <option value="72" selected>72 heures</option>
+      <option value="168">7 jours</option>
+      <option value="720">30 jours</option>
+    </select>
+  </div>
+</div>
+
+<!-- Stats rapides -->
+<div id="corr-stats" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:12px;margin-bottom:20px;"></div>
+
+<!-- Tabs -->
+<div style="display:flex;gap:4px;margin-bottom:16px;border-bottom:1px solid var(--border);padding-bottom:0;">
+  <button class="tab-btn active" onclick="showTab('ips')" id="tab-ips" style="padding:8px 16px;font-size:0.78rem;border:none;background:none;color:var(--green);border-bottom:2px solid var(--green);cursor:pointer;font-weight:600;">
+    <i class="fas fa-network-wired me-1"></i>Par IP
+  </button>
+  <button class="tab-btn" onclick="showTab('campaigns')" id="tab-campaigns" style="padding:8px 16px;font-size:0.78rem;border:none;background:none;color:var(--muted);border-bottom:2px solid transparent;cursor:pointer;font-weight:500;">
+    <i class="fas fa-layer-group me-1"></i>Campagnes
+  </button>
+  <button class="tab-btn" onclick="showTab('heatmap')" id="tab-heatmap" style="padding:8px 16px;font-size:0.78rem;border:none;background:none;color:var(--muted);border-bottom:2px solid transparent;cursor:pointer;font-weight:500;">
+    <i class="fas fa-th me-1"></i>Heatmap 72h
+  </button>
+</div>
+
+<!-- Tab: IPs -->
+<div id="panel-ips">
+  <div class="card-section" style="padding:0;overflow:hidden;">
+    <table class="table soc-table mb-0" id="tbl-ips">
+      <thead>
+        <tr>
+          <th>IP Source</th><th>Incidents</th><th>Anomalies</th>
+          <th>Sévérité max</th><th>Type d'attaque</th><th>Score max</th>
+          <th>Dernière activité</th><th>Score de risque</th><th></th>
+        </tr>
+      </thead>
+      <tbody id="tbody-ips"><tr><td colspan="9" class="empty-state">Chargement…</td></tr></tbody>
+    </table>
+  </div>
+</div>
+
+<!-- Tab: Campagnes -->
+<div id="panel-campaigns" style="display:none;">
+  <div id="campaigns-list"></div>
+</div>
+
+<!-- Tab: Heatmap -->
+<div id="panel-heatmap" style="display:none;">
+  <div class="card-section">
+    <div class="section-title">Activité horaire — 72 dernières heures</div>
+    <div id="heatmap-grid" style="overflow-x:auto;"></div>
+  </div>
+</div>
+
+<!-- Flyout IP detail -->
+<div id="flyout" style="position:fixed;top:0;right:0;width:380px;height:100vh;background:var(--bg2);border-left:1px solid var(--border);z-index:500;display:none;flex-direction:column;overflow:hidden;box-shadow:-8px 0 32px rgba(0,0,0,0.4);">
+  <div style="display:flex;align-items:center;justify-content:space-between;padding:14px 16px;border-bottom:1px solid var(--border);flex-shrink:0;">
+    <span id="flyout-title" style="font-size:0.85rem;font-weight:700;color:var(--text2);font-family:'JetBrains Mono',monospace;"></span>
+    <button onclick="closeFlyout()" style="background:none;border:none;color:var(--muted);cursor:pointer;font-size:1rem;"><i class="fas fa-times"></i></button>
+  </div>
+  <div id="flyout-body" style="flex:1;overflow-y:auto;padding:14px 16px;"></div>
+</div>
+
+<style>
+.tab-btn { transition: color 0.15s, border-color 0.15s; font-family:'Space Grotesk',sans-serif; }
+.tab-btn.active { color:var(--green) !important; border-bottom-color:var(--green) !important; }
+.sev-dot { width:8px;height:8px;border-radius:50%;display:inline-block;margin-right:5px; }
+</style>
+
+<script>
+const SEV_COLOR = {critical:'#FF4757',high:'#FF6B35',medium:'#FFD700',low:'#9FEF00'};
+
+function showTab(name) {
+  ['ips','campaigns','heatmap'].forEach(t => {
+    document.getElementById('panel-'+t).style.display = t===name ? 'block' : 'none';
+    const btn = document.getElementById('tab-'+t);
+    if (t===name) { btn.classList.add('active'); btn.style.color='var(--green)'; btn.style.borderBottom='2px solid var(--green)'; }
+    else          { btn.classList.remove('active'); btn.style.color='var(--muted)'; btn.style.borderBottom='2px solid transparent'; }
+  });
+  if (name==='heatmap') loadHeatmap();
+  if (name==='campaigns') loadCampaigns();
+}
+
+function hours() { return document.getElementById('sel-hours').value; }
+
+async function loadAll() { await Promise.all([loadGroups(), loadStats()]); }
+
+async function loadStats() {
+  try {
+    const d = await fetch(`/api/correlation/groups?hours=${hours()}`).then(r=>r.json());
+    const ips = d.groups || [];
+    const totalInc = ips.reduce((s,g)=>s+g.incident_count,0);
+    const totalAnm = ips.reduce((s,g)=>s+g.anomaly_count,0);
+    const critIPs  = ips.filter(g=>g.max_severity==='critical').length;
+    document.getElementById('corr-stats').innerHTML = `
+      <div class="stat-card"><div class="number" style="color:var(--cyan);font-size:1.6rem;">${ips.length}</div><div class="label">IPs actives</div></div>
+      <div class="stat-card"><div class="number" style="color:var(--orange);font-size:1.6rem;">${totalInc}</div><div class="label">Incidents</div></div>
+      <div class="stat-card"><div class="number" style="color:var(--purple);font-size:1.6rem;">${totalAnm}</div><div class="label">Anomalies</div></div>
+      <div class="stat-card"><div class="number" style="color:var(--red);font-size:1.6rem;">${critIPs}</div><div class="label">IPs critiques</div></div>
+    `;
+  } catch(e){}
+}
+
+async function loadGroups() {
+  const tbody = document.getElementById('tbody-ips');
+  tbody.innerHTML = '<tr><td colspan="9" class="empty-state">Chargement…</td></tr>';
+  try {
+    const d = await fetch(`/api/correlation/groups?hours=${hours()}`).then(r=>r.json());
+    const groups = d.groups || [];
+    if (!groups.length) { tbody.innerHTML = '<tr><td colspan="9" class="empty-state">Aucune activité sur la période</td></tr>'; return; }
+    tbody.innerHTML = groups.map(g => {
+      const sc = SEV_COLOR[g.max_severity] || '#4B5875';
+      return `<tr>
+        <td><code style="color:var(--cyan);font-size:0.78rem;">${g.ip}</code></td>
+        <td><span style="color:var(--orange);font-weight:700;">${g.incident_count}</span></td>
+        <td><span style="color:var(--purple);">${g.anomaly_count}</span></td>
+        <td><span class="sev-dot" style="background:${sc};box-shadow:0 0 5px ${sc};"></span><span style="color:${sc};font-weight:600;">${(g.max_severity||'—').toUpperCase()}</span></td>
+        <td><span class="type-mono">${g.attack_type||'—'}</span></td>
+        <td><span style="color:var(--yellow);font-family:'JetBrains Mono',monospace;">${g.max_score!=null?g.max_score.toFixed(2):'—'}</span></td>
+        <td style="font-size:0.73rem;color:var(--muted);">${(g.last_seen||'').slice(0,16).replace('T',' ')}</td>
+        <td><div style="width:60px;height:8px;background:var(--bg3);border-radius:4px;overflow:hidden;"><div style="height:100%;width:${g.risk_score_pct||0}%;background:${sc};"></div></div><span style="font-size:0.68rem;color:var(--muted);margin-left:4px;">${g.risk_score_pct||0}%</span></td>
+        <td><button class="btn-soc" style="font-size:0.7rem;padding:3px 10px;" onclick="openFlyout('${g.ip}')"><i class="fas fa-search"></i></button></td>
+      </tr>`;
+    }).join('');
+  } catch(e) { tbody.innerHTML = `<tr><td colspan="9" style="color:var(--red);padding:20px;">${e.message}</td></tr>`; }
+}
+
+async function loadCampaigns() {
+  const el = document.getElementById('campaigns-list');
+  el.innerHTML = '<p style="color:var(--muted);padding:20px;">Chargement…</p>';
+  try {
+    const d = await fetch(`/api/correlation/campaigns?hours=${hours()}`).then(r=>r.json());
+    const camps = d.campaigns || [];
+    if (!camps.length) { el.innerHTML = '<p class="empty-state">Aucune campagne détectée sur la période</p>'; return; }
+    el.innerHTML = camps.map((c,i) => `
+      <div class="card-section" style="margin-bottom:12px;">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;">
+          <div>
+            <span style="font-size:0.7rem;color:var(--muted);font-family:'JetBrains Mono',monospace;">CAMPAGNE #${i+1}</span>
+            <div style="font-size:0.9rem;font-weight:700;color:var(--text2);">${c.attack_type||'Type inconnu'}</div>
+          </div>
+          <span style="background:rgba(46,134,222,0.12);color:var(--blue);border:1px solid rgba(46,134,222,0.3);border-radius:6px;padding:3px 10px;font-size:0.72rem;font-weight:700;">${c.ip_count} IPs · ${c.incident_count} incidents</span>
+        </div>
+        <div style="display:flex;flex-wrap:wrap;gap:6px;">
+          ${(c.ips||[]).map(ip=>`<code style="font-size:0.72rem;background:var(--bg3);color:var(--cyan);border:1px solid var(--border);border-radius:4px;padding:2px 8px;cursor:pointer;" onclick="openFlyout('${ip}')">${ip}</code>`).join('')}
+        </div>
+      </div>`).join('');
+  } catch(e) { el.innerHTML = `<p style="color:var(--red);">${e.message}</p>`; }
+}
+
+async function loadHeatmap() {
+  const el = document.getElementById('heatmap-grid');
+  el.innerHTML = '<p style="color:var(--muted);">Chargement…</p>';
+  try {
+    const d = await fetch('/api/correlation/heatmap').then(r=>r.json());
+    const cells = d.cells || [];
+    if (!cells.length) { el.innerHTML = '<p class="empty-state">Aucune donnée</p>'; return; }
+    const maxV = Math.max(...cells.map(c=>c.count),1);
+    // Group by day
+    const byDay = {};
+    cells.forEach(c => { const day=c.hour.slice(0,10); if(!byDay[day])byDay[day]=[]; byDay[day].push(c); });
+    let html = '<div style="display:flex;flex-direction:column;gap:6px;">';
+    Object.entries(byDay).slice(0,3).forEach(([day,hrs]) => {
+      html += `<div style="display:flex;align-items:center;gap:6px;"><span style="font-size:0.68rem;color:var(--muted);font-family:monospace;width:80px;flex-shrink:0;">${day}</span><div style="display:flex;gap:3px;flex-wrap:wrap;">`;
+      hrs.forEach(h => {
+        const pct = h.count/maxV;
+        const bg = pct>0.7?'rgba(255,71,87,0.8)':pct>0.4?'rgba(255,107,53,0.7)':pct>0.1?'rgba(255,215,0,0.5)':'rgba(159,239,0,0.15)';
+        html += `<div title="${h.hour.slice(11,13)}h — ${h.count} événements" style="width:22px;height:22px;border-radius:3px;background:${bg};cursor:default;display:flex;align-items:center;justify-content:center;font-size:0.55rem;color:rgba(255,255,255,0.7);">${h.count||''}</div>`;
+      });
+      html += '</div></div>';
+    });
+    html += '</div>';
+    el.innerHTML = html;
+  } catch(e) { el.innerHTML = `<p style="color:var(--red);">${e.message}</p>`; }
+}
+
+async function openFlyout(ip) {
+  const flyout = document.getElementById('flyout');
+  document.getElementById('flyout-title').textContent = ip;
+  document.getElementById('flyout-body').innerHTML = '<p style="color:var(--muted);">Chargement…</p>';
+  flyout.style.display = 'flex';
+  try {
+    const d = await fetch(`/api/correlation/ip/${encodeURIComponent(ip)}?hours=${hours()}`).then(r=>r.json());
+    const incs = d.incidents || [];
+    let html = `<div style="margin-bottom:14px;">
+      <div style="font-size:0.7rem;color:var(--muted);text-transform:uppercase;letter-spacing:1px;margin-bottom:6px;">Résumé</div>
+      <div style="display:flex;gap:10px;flex-wrap:wrap;">
+        <span style="color:var(--orange);">${d.incident_count||0} incidents</span>
+        <span style="color:var(--purple);">${d.anomaly_count||0} anomalies</span>
+        <span style="color:var(--red);">${d.pe_event_count||0} post-exploit</span>
+      </div>
+    </div>`;
+    if (incs.length) {
+      html += '<div style="font-size:0.7rem;color:var(--muted);text-transform:uppercase;letter-spacing:1px;margin-bottom:8px;">Timeline incidents</div>';
+      html += incs.map(inc => {
+        const sc = SEV_COLOR[inc.severity]||'#4B5875';
+        return `<div style="border-left:2px solid ${sc};padding:6px 10px;margin-bottom:8px;background:var(--bg3);border-radius:0 6px 6px 0;">
+          <div style="font-size:0.78rem;font-weight:600;color:var(--text2);">${inc.title||'—'}</div>
+          <div style="display:flex;gap:8px;margin-top:3px;font-size:0.68rem;color:var(--muted);">
+            <span style="color:${sc};">${(inc.severity||'').toUpperCase()}</span>
+            <span>${(inc.created_at||'').slice(0,16).replace('T',' ')}</span>
+            ${inc.status?`<span class="type-mono" style="font-size:0.65rem;">${inc.status}</span>`:''}
+          </div>
+        </div>`;
+      }).join('');
+    } else { html += '<p style="color:var(--muted);font-size:0.78rem;">Aucun incident</p>'; }
+    document.getElementById('flyout-body').innerHTML = html;
+  } catch(e) { document.getElementById('flyout-body').innerHTML = `<p style="color:var(--red);">${e.message}</p>`; }
+}
+
+function closeFlyout() { document.getElementById('flyout').style.display='none'; }
+
+loadAll();
+</script>
+{% endblock %}

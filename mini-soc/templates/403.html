@@ -1,0 +1,15 @@
+{% extends "base.html" %}
+{% block title %}Accès refusé{% endblock %}
+{% block content %}
+<div class="card-section text-center py-5">
+  <i class="fas fa-lock fa-3x mb-3" style="color:var(--red); display:block;"></i>
+  <h4 style="color:var(--red);">Accès refusé</h4>
+  <div style="color:var(--muted); margin-top:8px; font-size:0.9rem;">
+    Cette page nécessite un niveau supérieur à votre compte
+    {% if user %}<strong style="color:var(--blue);">{{ user.name }} ({{ user.level }})</strong>{% endif %}.
+  </div>
+  <a href="/" class="btn-soc btn-soc-primary mt-4" style="display:inline-flex;">
+    <i class="fas fa-home me-2"></i>Retour à l'accueil
+  </a>
+</div>
+{% endblock %}

@@ -1,0 +1,956 @@
+{% extends "base.html" %}
+{% block title %}ML/IA — Détection{% endblock %}
+{% block content %}
+<style>
+  .filter-bar { background: var(--bg2); border: 1px solid var(--border); border-radius: 10px; padding: 14px 18px; margin-bottom: 18px; }
+  .filter-bar label { font-size: 0.72rem; color: var(--muted); text-transform: uppercase; letter-spacing: 1px; display: block; margin-bottom: 4px; }
+  .f-input { background: var(--bg3); border: 1px solid var(--border); color: var(--text); border-radius: 6px; padding: 5px 10px; font-size: 0.82rem; width: 100%; }
+  .f-input:focus { outline: none; border-color: var(--blue); }
+  .f-input option { background: var(--bg3); }
+  .kpi-bar { display: flex; gap: 12px; flex-wrap: wrap; margin-bottom: 18px; }
+  .kpi-card { background: var(--bg2); border: 1px solid var(--border); border-radius: 10px; padding: 14px 20px; flex: 1; min-width: 120px; text-align: center; }
+  .kpi-card .kpi-val { font-size: 1.8rem; font-weight: 700; }
+  .kpi-card .kpi-lbl { font-size: 0.7rem; color: var(--muted); text-transform: uppercase; letter-spacing: 1px; margin-top: 4px; }
+  .score-bar-wrap { display: flex; align-items: center; gap: 6px; }
+  .score-bar { height: 6px; border-radius: 3px; background: var(--bg3); flex: 1; overflow: hidden; }
+  .score-bar-fill { height: 100%; border-radius: 3px; transition: width 0.3s; }
+  .label-btn { border: none; border-radius: 5px; font-size: 0.72rem; padding: 3px 8px; cursor: pointer; font-weight: 600; transition: all 0.2s; }
+  .btn-tp  { background: rgba(63,185,80,0.15); color: #3fb950; border: 1px solid #3fb950; }
+  .btn-tp:hover  { background: rgba(63,185,80,0.35); }
+  .btn-fp  { background: rgba(248,81,73,0.15); color: #f85149; border: 1px solid #f85149; }
+  .btn-fp:hover  { background: rgba(248,81,73,0.35); }
+  .btn-ben { background: rgba(88,166,255,0.15); color: #58a6ff; border: 1px solid #58a6ff; }
+  .btn-ben:hover { background: rgba(88,166,255,0.35); }
+  .pagination-bar { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-top: 12px; }
+  .page-btn { background: var(--bg3); border: 1px solid var(--border); color: var(--text); border-radius: 6px; padding: 5px 14px; font-size: 0.82rem; cursor: pointer; transition: all 0.2s; }
+  .page-btn:hover:not(:disabled) { border-color: var(--blue); color: var(--blue); }
+  .page-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+  .loading-row td { text-align: center; padding: 40px; color: var(--muted); }
+  .toast-container { position: fixed; top: 20px; right: 20px; z-index: 9999; }
+  .soc-toast { background: var(--bg2); border: 1px solid var(--border); border-radius: 8px; padding: 12px 18px; color: var(--text); font-size: 0.83rem; margin-bottom: 8px; animation: slideIn 0.3s ease; min-width: 240px; }
+  @keyframes slideIn { from { transform: translateX(100px); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
+  input[type=range] { accent-color: var(--purple); }
+  .ia-expand-row { display:none; background:#0d1117; }
+  .ia-expand-row.open { display:table-row; }
+  .ia-expand-btn { background:none; border:none; color:var(--muted); cursor:pointer; padding:2px 6px; transition:color .15s; }
+  .ia-expand-btn:hover { color:var(--blue); }
+  .ia-inline-panel { padding:14px 20px; }
+  .ia-stat-mini { background:var(--bg2); border:1px solid var(--border); border-radius:6px; padding:8px 12px; text-align:center; flex:1; min-width:80px; }
+  .ia-stat-mini .v { font-size:1.1rem; font-weight:700; line-height:1.2; }
+  .ia-stat-mini .l { font-size:0.6rem; color:var(--muted); text-transform:uppercase; letter-spacing:0.8px; margin-top:2px; }
+  .ia-verdict-banner { border-radius:8px; padding:10px 14px; display:flex; align-items:center; gap:10px; margin-bottom:10px; }
+  .model-tab { background:var(--bg3); border:1px solid var(--border); color:var(--muted); border-radius:7px; padding:6px 16px; font-size:0.78rem; font-weight:600; cursor:pointer; transition:all .18s; }
+  .model-tab.active { color:var(--text); border-color:var(--blue); background:rgba(88,166,255,0.1); }
+  .model-tab:hover:not(.active) { color:var(--text); border-color:var(--border); }
+</style>
+
+<div class="toast-container" id="toastContainer"></div>
+
+<div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
+  <div>
+    <h5 class="mb-0"><i class="fas fa-brain me-2" style="color:var(--purple)"></i>Détections ML/IA</h5>
+    <div style="font-size:0.7rem;color:var(--muted);margin-top:2px;">Isolation Forest · Autoencoder DL · Random Forest</div>
+  </div>
+  <div class="d-flex gap-2 align-items-center flex-wrap">
+    <div class="d-flex gap-2" id="modelTabs">
+      <button class="model-tab active" data-model="if" data-label="Isolation Forest" onclick="switchModel(this)">
+        <i class="fas fa-tree me-1" style="color:var(--blue)"></i>Isolation Forest
+      </button>
+      <button class="model-tab" data-model="dl" data-label="Autoencoder DL" onclick="switchModel(this)">
+        <i class="fas fa-microchip me-1" style="color:var(--orange)"></i>Autoencoder DL
+      </button>
+      <button class="model-tab" data-model="rf" data-label="Random Forest" onclick="switchModel(this)">
+        <i class="fas fa-sitemap me-1" style="color:var(--green)"></i>Random Forest
+      </button>
+    </div>
+  </div>
+  <div class="d-flex gap-2">
+    <a href="#" onclick="exportCSV(event)" class="btn-soc">
+      <i class="fas fa-download me-1"></i>Exporter CSV
+    </a>
+  </div>
+</div>
+
+<!-- Metrics bar -->
+<div class="kpi-bar" id="metricsBar">
+  <div class="kpi-card"><div class="kpi-val" style="color:var(--purple)" id="m-total">—</div><div class="kpi-lbl">Détections 24h</div></div>
+  <div class="kpi-card"><div class="kpi-val" style="color:var(--blue)" id="m-labeled">—</div><div class="kpi-lbl">Vérifiés</div></div>
+  <div class="kpi-card"><div class="kpi-val" style="color:var(--green)" id="m-precision">N/A</div><div class="kpi-lbl">Precision</div></div>
+  <div class="kpi-card"><div class="kpi-val" style="color:var(--orange)" id="m-f1">N/A</div><div class="kpi-lbl">F1 Score</div></div>
+</div>
+<div class="kpi-bar mb-4">
+  <div class="kpi-card"><div class="kpi-val" style="color:var(--green)" id="m-tp">—</div><div class="kpi-lbl">TP</div></div>
+  <div class="kpi-card"><div class="kpi-val" style="color:var(--red)" id="m-fp">—</div><div class="kpi-lbl">FP</div></div>
+  <div class="kpi-card"><div class="kpi-val" style="color:var(--yellow)" id="m-fn">—</div><div class="kpi-lbl">FN estimé</div></div>
+  <div class="kpi-card"><div class="kpi-val" style="color:var(--muted)" id="m-unverified">—</div><div class="kpi-lbl">Non vérifiés</div></div>
+  <div class="kpi-card"><div class="kpi-val" style="color:var(--blue)" id="m-recall">N/A</div><div class="kpi-lbl">Recall</div></div>
+</div>
+
+<!-- Filter bar -->
+<div class="filter-bar">
+  <div class="row g-2 align-items-end">
+    <div class="col-md-2 col-sm-6">
+      <label>Score min: <span id="lbl_min_score">0.00</span></label>
+      <input type="range" id="f_min_score" min="0" max="1" step="0.05" value="0"
+        class="f-input" style="padding:0; background:transparent; border:none"
+        oninput="document.getElementById('lbl_min_score').textContent=parseFloat(this.value).toFixed(2); debounceLoad()">
+    </div>
+    <div class="col-md-2 col-sm-6">
+      <label>Score max: <span id="lbl_max_score">1.00</span></label>
+      <input type="range" id="f_max_score" min="0" max="1" step="0.05" value="1"
+        class="f-input" style="padding:0; background:transparent; border:none"
+        oninput="document.getElementById('lbl_max_score').textContent=parseFloat(this.value).toFixed(2); debounceLoad()">
+    </div>
+    <div class="col-md-2 col-sm-6">
+      <label>IP source</label>
+      <input type="text" id="f_ip" class="f-input" placeholder="ex: 192.168.1.1" oninput="debounceLoad()">
+    </div>
+    <div class="col-md-2 col-sm-6">
+      <label>Type</label>
+      <select id="f_type" class="f-input" onchange="resetAndLoad()">
+        <option value="">Tous</option>
+        <option value="auth">auth</option>
+        <option value="apache_access">apache_access</option>
+        <option value="apache_error">apache_error</option>
+        <option value="syslog">syslog</option>
+        <option value="suricata">suricata</option>
+      </select>
+    </div>
+    <div class="col-md-2 col-sm-6">
+      <label>Sévérité</label>
+      <select id="f_sev" class="f-input" onchange="resetAndLoad()">
+        <option value="">Toutes</option>
+        <option value="low">Low</option>
+        <option value="medium">Medium</option>
+        <option value="high">High</option>
+        <option value="critical">Critical</option>
+      </select>
+    </div>
+    <div class="col-md-2 col-sm-6">
+      <label>De</label>
+      <input type="datetime-local" id="f_from" class="f-input" onchange="resetAndLoad()">
+    </div>
+    <div class="col-md-2 col-sm-6">
+      <label>À</label>
+      <input type="datetime-local" id="f_to" class="f-input" onchange="resetAndLoad()">
+    </div>
+    <div class="col-md-1 col-sm-4">
+      <label>Par page</label>
+      <select id="f_size" class="f-input" onchange="currentSize=parseInt(this.value); resetAndLoad()">
+        <option value="25" selected>25</option>
+        <option value="50">50</option>
+        <option value="100">100</option>
+      </select>
+    </div>
+    <div class="col-md-2 col-sm-4 d-flex gap-2">
+      <button onclick="resetAndLoad()" class="btn-soc btn-soc-primary w-100" style="justify-content:center">
+        <i class="fas fa-search me-1"></i>Filtrer
+      </button>
+      <button onclick="clearFilters()" class="btn-soc" style="padding:5px 12px">
+        <i class="fas fa-times"></i>
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- Table -->
+<div class="card-section" style="padding:0; overflow:hidden;">
+  <table class="table soc-table mb-0">
+    <thead>
+      <tr>
+        <th>Timestamp</th>
+        <th>Score</th>
+        <th>Sévérité</th>
+        <th>IP source</th>
+        <th>Type</th>
+        <th>SSH user</th>
+        <th>Actions</th>
+        <th style="width:36px;" title="Détail TP/FP"><i class="fas fa-chevron-down" style="opacity:0.4;font-size:0.65rem;"></i></th>
+      </tr>
+    </thead>
+    <tbody id="anomalyBody">
+      <tr class="loading-row"><td colspan="8"><i class="fas fa-spinner fa-spin me-2"></i>Chargement...</td></tr>
+    </tbody>
+  </table>
+</div>
+
+<!-- Pagination -->
+<div class="pagination-bar">
+  <button class="page-btn" id="btnPrev" onclick="prevPage()" disabled>
+    <i class="fas fa-chevron-left me-1"></i>Précédent
+  </button>
+  <span id="pageInfo" class="text-muted small">Page 1 / 1</span>
+  <button class="page-btn" id="btnNext" onclick="nextPage()" disabled>
+    Suivant<i class="fas fa-chevron-right ms-1"></i>
+  </button>
+  <span class="text-muted small ms-2" id="resultInfo">—</span>
+</div>
+
+<script>
+let currentPage = 1, currentSize = 25;
+let debounceTimer = null;
+let _hits = [];
+let _currentModel = 'if';
+
+const SEV_COLORS = {
+  critical: 'sev-critical', high: 'sev-high',
+  medium: 'sev-medium', low: 'sev-low'
+};
+
+const MODEL_LABELS = {
+  if: 'Isolation Forest',
+  dl: 'Autoencoder DL',
+  rf: 'Random Forest'
+};
+const MODEL_COLORS = { if: 'var(--blue)', dl: 'var(--orange)', rf: 'var(--green)' };
+
+function switchModel(btn) {
+  document.querySelectorAll('.model-tab').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  _currentModel = btn.dataset.model;
+  document.querySelectorAll('#modelTabs .model-tab').forEach(b => b.classList.toggle('active', b===btn));
+  // Reset expand cache
+  Object.keys(_iaExpandCache).forEach(k => delete _iaExpandCache[k]);
+  resetAndLoad();
+}
+
+function debounceLoad() {
+  clearTimeout(debounceTimer);
+  debounceTimer = setTimeout(() => { currentPage = 1; loadAnomalies(); }, 450);
+}
+
+function resetAndLoad() {
+  currentPage = 1;
+  Object.keys(_iaExpandCache).forEach(k => delete _iaExpandCache[k]);
+  loadAnomalies();
+}
+
+function loadAnomalies() {
+  const dateFrom = document.getElementById('f_from').value;
+  const dateTo   = document.getElementById('f_to').value;
+  const params = new URLSearchParams({
+    model:     _currentModel,
+    page:      currentPage,
+    size:      currentSize,
+    min_score: document.getElementById('f_min_score').value,
+    max_score: document.getElementById('f_max_score').value,
+    src_ip:    document.getElementById('f_ip').value,
+    log_type:  document.getElementById('f_type').value,
+    severity:  document.getElementById('f_sev').value,
+    date_from: dateFrom ? new Date(dateFrom).toISOString() : 'now-24h',
+    date_to:   dateTo   ? new Date(dateTo).toISOString()   : 'now'
+  });
+  document.getElementById('anomalyBody').innerHTML =
+    '<tr class="loading-row"><td colspan="8"><i class="fas fa-spinner fa-spin me-2"></i>Chargement...</td></tr>';
+
+  fetch('/api/anomalies/model?' + params)
+    .then(r => r.json())
+    .then(data => renderAnomalies(data))
+    .catch(() => {
+      document.getElementById('anomalyBody').innerHTML =
+        '<tr class="loading-row"><td colspan="8" style="color:var(--red)">Erreur de chargement</td></tr>';
+    });
+}
+
+function renderAnomalies(data) {
+  const tbody = document.getElementById('anomalyBody');
+  const total = data.total || 0;
+  const hits  = data.hits  || [];
+
+  document.getElementById('pageInfo').textContent =
+    `Page ${data.page} / ${data.pages}`;
+  document.getElementById('resultInfo').textContent =
+    `${total.toLocaleString()} anomalie(s)`;
+  document.getElementById('btnPrev').disabled = data.page <= 1;
+  document.getElementById('btnNext').disabled = data.page >= data.pages;
+
+  if (!hits.length) {
+    tbody.innerHTML = '<tr class="loading-row"><td colspan="8">Aucune anomalie pour ces filtres</td></tr>';
+    return;
+  }
+
+  _hits = hits;
+  let html = '';
+  hits.forEach((h, idx) => {
+    const ts    = toLocal(h['@timestamp']);
+    const score = parseFloat(h.anomaly_score || 0);
+    const pct   = Math.min(100, Math.round(score * 100));
+    const sev   = h.severity || 'medium';
+    const sevCls = SEV_COLORS[sev] || 'sev-medium';
+    const scoreColor = score >= 0.7 ? '#f85149' : score >= 0.4 ? '#ffa657' : '#e3b341';
+    const srcIp  = esc(h.src_ip || '—');
+    const logType = esc(h.log_type || '—');
+    const sshUser = esc(h.ssh_user || '—');
+    const anomalyTs = esc(h['@timestamp'] || '');
+
+    html += `<tr style="cursor:pointer" onclick="openDetail(${idx})" title="Voir le détail">
+      <td style="white-space:nowrap;color:var(--muted);font-size:0.78rem">${esc(ts)}</td>
+      <td style="min-width:120px">
+        <div class="score-bar-wrap">
+          <div class="score-bar">
+            <div class="score-bar-fill" style="width:${pct}%;background:${scoreColor}"></div>
+          </div>
+          <span style="font-family:monospace;font-size:0.8rem;color:${scoreColor};font-weight:600">${score.toFixed(4)}</span>
+        </div>
+      </td>
+      <td><span class="badge-sev ${sevCls}">${esc(sev)}</span></td>
+      <td style="font-family:monospace;font-size:0.8rem;color:var(--blue)">${srcIp}</td>
+      <td><span class="type-mono">${logType}</span></td>
+      <td style="font-size:0.8rem;color:var(--muted)">${sshUser}</td>
+      <td onclick="event.stopPropagation()">
+        <button class="label-btn btn-tp"  onclick="label('${esc(srcIp.replace(/'/g,''))}','${anomalyTs}','TP',this)">✓TP</button>
+        <button class="label-btn btn-fp"  onclick="label('${esc(srcIp.replace(/'/g,''))}','${anomalyTs}','FP',this)">✗FP</button>
+        <button class="label-btn btn-ben" onclick="label('${esc(srcIp.replace(/'/g,''))}','${anomalyTs}','Benign',this)">~Bénin</button>
+      </td>
+      <td onclick="event.stopPropagation()">
+        <button class="label-btn" onclick="openDetail(${idx})" style="background:rgba(88,166,255,0.1);color:var(--blue);border:1px solid var(--blue);padding:3px 7px;" title="Détail complet">
+          <i class="fas fa-search-plus"></i>
+        </button>
+      </td>
+      <td onclick="event.stopPropagation()">
+        <button class="ia-expand-btn" id="ia-expbtn-${idx}" onclick="toggleIAExpand(${idx})" title="Voir détail · Indices TP/FP">
+          <i class="fas fa-chevron-down" id="ia-expicon-${idx}"></i>
+        </button>
+      </td>
+    </tr>
+    <tr class="ia-expand-row" id="ia-exprow-${idx}">
+      <td colspan="8" style="padding:0;">
+        <div class="ia-inline-panel" id="ia-expcontent-${idx}">
+          <div style="text-align:center;padding:20px;color:var(--muted);font-size:0.78rem;">
+            <i class="fas fa-spinner fa-spin me-1"></i>Chargement analyse…
+          </div>
+        </div>
+      </td>
+    </tr>`;
+  });
+  tbody.innerHTML = html;
+}
+
+function label(srcIp, anomalyTs, verdict, btn) {
+  btn.disabled = true;
+  btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
+  fetch('/api/anomaly/label', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({ model: 'isolation_forest', src_ip: srcIp, anomaly_ts: anomalyTs, verdict })
+  })
+  .then(r => r.json())
+  .then(d => {
+    const colors = { TP: '#3fb950', FP: '#f85149', Benign: '#58a6ff' };
+    showToast(`<i class="fas fa-check me-2" style="color:${colors[verdict]}"></i>Labellisé : <strong>${verdict}</strong>`, colors[verdict]);
+    loadMetrics();
+    btn.innerHTML = verdict === 'TP' ? '✓TP' : verdict === 'FP' ? '✗FP' : '~Bénin';
+    btn.disabled = false;
+    btn.style.opacity = '0.5';
+  })
+  .catch(() => {
+    btn.disabled = false;
+    btn.innerHTML = verdict;
+    showToast('<i class="fas fa-times me-2" style="color:var(--red)"></i>Erreur label', 'var(--red)');
+  });
+}
+
+function loadMetrics() {
+  fetch('/api/ia/metrics?window=24h')
+    .then(r => r.json())
+    .then(m => {
+      document.getElementById('m-total').textContent     = m.total ?? '—';
+      document.getElementById('m-labeled').textContent   = m.labeled ?? '—';
+      document.getElementById('m-precision').textContent = m.precision != null ? (m.precision*100).toFixed(1)+'%' : 'N/A';
+      document.getElementById('m-f1').textContent        = m.f1       != null ? m.f1.toFixed(3) : 'N/A';
+      document.getElementById('m-tp').textContent        = m.tp ?? '—';
+      document.getElementById('m-fp').textContent        = m.fp ?? '—';
+      document.getElementById('m-fn').textContent        = m.fn ?? '—';
+      document.getElementById('m-recall').textContent    = m.recall != null ? (m.recall*100).toFixed(1)+'%' : 'N/A';
+      const unverified = (m.total || 0) - (m.labeled || 0);
+      document.getElementById('m-unverified').textContent = unverified >= 0 ? unverified : '—';
+    })
+    .catch(() => {});
+}
+
+function exportCSV(e) {
+  e.preventDefault();
+  const dateFrom = document.getElementById('f_from').value;
+  const dateTo   = document.getElementById('f_to').value;
+  const params = new URLSearchParams({
+    model: 'if',
+    date_from: dateFrom ? new Date(dateFrom).toISOString() : 'now-24h'
+  });
+  window.location.href = '/api/anomalies/export?' + params;
+  showToast('<i class="fas fa-download me-2"></i>Export CSV en cours…');
+}
+
+function clearFilters() {
+  document.getElementById('f_min_score').value = 0;
+  document.getElementById('f_max_score').value = 1;
+  document.getElementById('lbl_min_score').textContent = '0.00';
+  document.getElementById('lbl_max_score').textContent = '1.00';
+  ['f_ip','f_type','f_sev','f_from','f_to'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.value = '';
+  });
+  currentPage = 1;
+  loadAnomalies();
+}
+
+function prevPage() { if (currentPage > 1) { currentPage--; loadAnomalies(); } }
+function nextPage() { currentPage++; loadAnomalies(); }
+
+function esc(s) {
+  if (!s) return '';
+  return String(s)
+    .replace(/&/g,'&amp;').replace(/</g,'&lt;')
+    .replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+function showToast(msg, borderColor) {
+  const c = document.getElementById('toastContainer');
+  const t = document.createElement('div');
+  t.className = 'soc-toast';
+  if (borderColor) { t.style.borderLeftWidth = '3px'; t.style.borderLeftColor = borderColor; }
+  t.innerHTML = msg;
+  c.appendChild(t);
+  setTimeout(() => t.remove(), 3500);
+}
+
+loadMetrics();
+loadAnomalies();
+setInterval(() => { loadMetrics(); loadAnomalies(); }, 30000);
+
+// ── Detail Drawer ────────────────────────────────────────────────────────────
+const MODEL_ID_MAP = { if: 'isolation_forest', dl: 'autoencoder', rf: 'random_forest' };
+function openDetail(idx) {
+  const h = _hits[idx];
+  if (!h) return;
+  populateDrawer(h, MODEL_ID_MAP[_currentModel] || 'isolation_forest');
+  document.getElementById('detailDrawer').classList.add('open');
+}
+
+function closeDrawer() {
+  document.getElementById('detailDrawer').classList.remove('open');
+}
+
+async function populateDrawer(h, model) {
+  const score = parseFloat(h.anomaly_score || 0);
+  const sev   = h.severity || 'medium';
+  const scoreColor = score >= 0.7 ? 'var(--red)' : score >= 0.4 ? 'var(--orange)' : 'var(--yellow)';
+  const ip    = h.src_ip || '—';
+  const ts    = (h['@timestamp'] || '').slice(0,19).replace('T',' ');
+
+  document.getElementById('dw-title').innerHTML =
+    `<span class="badge-sev sev-${sev}" style="margin-right:8px;">${sev.toUpperCase()}</span>
+     <span style="font-family:monospace;color:var(--blue);">${esc(ip)}</span>`;
+
+  // Header: score + meta + label buttons
+  document.getElementById('dw-meta').innerHTML = `
+    <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:14px;">
+      <div style="background:var(--bg3);border-radius:8px;padding:10px;text-align:center;">
+        <div style="font-size:0.62rem;color:var(--muted);text-transform:uppercase;letter-spacing:1px;margin-bottom:2px;">Score IF</div>
+        <div style="font-size:1.5rem;font-weight:800;color:${scoreColor};line-height:1;">${score.toFixed(3)}</div>
+        <div style="font-size:0.65rem;color:var(--muted);margin-top:2px;">${score>=0.7?'⚠ Très suspect':score>=0.4?'Suspect':'Modéré'}</div>
+      </div>
+      <div style="background:var(--bg3);border-radius:8px;padding:10px;text-align:center;">
+        <div style="font-size:0.62rem;color:var(--muted);text-transform:uppercase;letter-spacing:1px;margin-bottom:2px;">Type log</div>
+        <div class="type-mono" style="font-size:0.82rem;margin-top:4px;">${esc(h.log_type||'—')}</div>
+        <div style="font-size:0.65rem;color:var(--muted);margin-top:4px;">${esc(h.ssh_user ? 'user: '+h.ssh_user : '—')}</div>
+      </div>
+      <div style="background:var(--bg3);border-radius:8px;padding:10px;text-align:center;">
+        <div style="font-size:0.62rem;color:var(--muted);text-transform:uppercase;letter-spacing:1px;margin-bottom:2px;">Horodatage</div>
+        <div style="font-size:0.72rem;color:var(--text);margin-top:6px;font-family:monospace;">${esc(ts)}</div>
+      </div>
+    </div>
+    <div style="font-size:0.7rem;color:var(--muted);text-transform:uppercase;letter-spacing:1px;margin-bottom:6px;">
+      <i class="fas fa-gavel me-1"></i>Verdict — Labelliser
+    </div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px;">
+      <button class="label-btn btn-tp"  style="font-size:0.82rem;padding:6px 14px;flex:1;" onclick="labelDrawer('${esc(ip)}','${esc(h['@timestamp']||'')}','TP','${model}',this)">
+        <i class="fas fa-check me-1"></i>Vrai Positif (TP)
+      </button>
+      <button class="label-btn btn-fp"  style="font-size:0.82rem;padding:6px 14px;flex:1;" onclick="labelDrawer('${esc(ip)}','${esc(h['@timestamp']||'')}','FP','${model}',this)">
+        <i class="fas fa-times me-1"></i>Faux Positif (FP)
+      </button>
+      <button class="label-btn btn-ben" style="font-size:0.82rem;padding:6px 14px;flex:1;" onclick="labelDrawer('${esc(ip)}','${esc(h['@timestamp']||'')}','Benign','${model}',this)">
+        <i class="fas fa-minus me-1"></i>Bénin
+      </button>
+    </div>`;
+
+  // Spinners pendant le chargement
+  document.getElementById('dw-profile').innerHTML  = '<div style="text-align:center;padding:20px;color:var(--muted);font-size:0.78rem;"><i class="fas fa-spinner fa-spin me-1"></i>Chargement profil IP…</div>';
+  document.getElementById('dw-decision').innerHTML = '';
+  document.getElementById('dw-logs').innerHTML     = '<div style="text-align:center;padding:14px;color:var(--muted);font-size:0.78rem;"><i class="fas fa-spinner fa-spin me-1"></i>Chargement logs…</div>';
+  document.getElementById('dw-incidents').innerHTML = '<div style="text-align:center;padding:14px;color:var(--muted);font-size:0.78rem;"><i class="fas fa-spinner fa-spin me-1"></i>Chargement incidents…</div>';
+
+  if (ip === '—') {
+    document.getElementById('dw-profile').innerHTML = '<span style="color:var(--muted);font-size:0.75rem;">IP inconnue</span>';
+    return;
+  }
+
+  // Chargement en parallèle : profil IP + logs récents
+  const [profR, logsR] = await Promise.all([
+    fetch(`/api/ip/profile/${encodeURIComponent(ip)}`).then(r=>r.json()).catch(()=>({})),
+    fetch(`/api/logs?src_ip=${encodeURIComponent(ip)}&size=8&date_from=now-24h`).then(r=>r.json()).catch(()=>({hits:[]})),
+  ]);
+
+  // ── Profil IP ──────────────────────────────────────────────────────
+  const p = profR;
+  const total    = p.total_logs  || 0;
+  const sshFail  = p.ssh_failed  || 0;
+  const sshOk    = p.ssh_success || 0;
+  const httpErr  = p.http_errors || 0;
+  const ids      = p.ids_alerts  || 0;
+  const rate     = p.rate_per_min || 0;
+
+  function statBox(label, val, color) {
+    return `<div style="background:var(--bg3);border-radius:6px;padding:8px 10px;text-align:center;">
+      <div style="font-size:1.1rem;font-weight:700;color:${color};">${val}</div>
+      <div style="font-size:0.62rem;color:var(--muted);margin-top:1px;">${label}</div>
+    </div>`;
+  }
+
+  let profileHtml = `
+    <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:6px;margin-bottom:10px;">
+      ${statBox('Logs 24h',   total,   'var(--blue)')}
+      ${statBox('SSH Failed', sshFail, sshFail>50?'var(--red)':'var(--orange)')}
+      ${statBox('SSH OK',     sshOk,   sshOk>0?'var(--green)':'var(--muted)')}
+      ${statBox('HTTP Erreurs',httpErr, httpErr>100?'var(--red)':'var(--orange)')}
+      ${statBox('IDS Alerts', ids,     ids>0?'var(--red)':'var(--muted)')}
+      ${statBox('Events/min', rate,    rate>10?'var(--red)':rate>2?'var(--orange)':'var(--muted)')}
+    </div>`;
+
+  // Première/dernière vue
+  if (p.first_seen || p.last_seen) {
+    profileHtml += `<div style="display:flex;gap:12px;margin-bottom:10px;font-size:0.72rem;color:var(--muted);">
+      <span><i class="fas fa-clock me-1"></i>1re vue: <span style="color:var(--text);">${esc(p.first_seen||'?')}</span></span>
+      <span><i class="fas fa-clock me-1"></i>Dernière: <span style="color:var(--text);">${esc(p.last_seen||'?')}</span></span>
+    </div>`;
+  }
+
+  // Top SSH users tentés
+  if (p.ssh_users && p.ssh_users.length) {
+    const users = p.ssh_users.slice(0,5).map(u =>
+      `<span style="background:rgba(255,166,87,0.12);color:var(--orange);border:1px solid rgba(255,166,87,0.3);border-radius:4px;padding:2px 7px;font-size:0.68rem;font-family:monospace;">${esc(u.user)} ×${u.count}</span>`
+    ).join(' ');
+    profileHtml += `<div style="margin-bottom:8px;"><div style="font-size:0.62rem;color:var(--muted);margin-bottom:4px;text-transform:uppercase;letter-spacing:1px;">Usernames SSH tentés</div>${users}</div>`;
+  }
+
+  // Top HTTP paths
+  if (p.http_paths && p.http_paths.length) {
+    const paths = p.http_paths.slice(0,4).map(u =>
+      `<div style="font-size:0.68rem;font-family:monospace;color:var(--red);padding:2px 0;">${esc(u.path.slice(0,50))} <span style="color:var(--muted);">×${u.count}</span></div>`
+    ).join('');
+    profileHtml += `<div style="margin-bottom:8px;"><div style="font-size:0.62rem;color:var(--muted);margin-bottom:4px;text-transform:uppercase;letter-spacing:1px;">Paths HTTP ciblés</div>${paths}</div>`;
+  }
+
+  document.getElementById('dw-profile').innerHTML = profileHtml;
+
+  // ── Aide à la décision TP/FP ──────────────────────────────────────
+  const tpSigns = [], fpSigns = [];
+
+  if (score >= 0.7)          tpSigns.push('Score IF très élevé (≥0.7)');
+  else if (score >= 0.4)     tpSigns.push('Score IF élevé (≥0.4)');
+  if (sshFail > 100)         tpSigns.push(`SSH brute force intensif : ${sshFail} échecs`);
+  else if (sshFail > 20)     tpSigns.push(`Nombreux échecs SSH : ${sshFail}`);
+  if (ids > 0)               tpSigns.push(`${ids} alerte(s) IDS détectées`);
+  if (rate > 10)             tpSigns.push(`Débit très élevé : ${rate} events/min`);
+  else if (rate > 3)         tpSigns.push(`Débit anormal : ${rate} events/min`);
+  if (httpErr > 200)         tpSigns.push(`Scan HTTP agressif : ${httpErr} erreurs`);
+  if (p.ssh_users && p.ssh_users.length > 3) tpSigns.push(`${p.ssh_users.length} usernames différents tentés`);
+
+  if (sshFail === 0 && sshOk === 0 && score < 0.5) fpSigns.push('Aucune activité SSH anormale');
+  if (rate < 1)              fpSigns.push('Faible débit d\'événements');
+  if (sshOk > sshFail)      fpSigns.push(`Plus de succès SSH que d'échecs (${sshOk} OK vs ${sshFail} KO)`);
+  if (total < 10)            fpSigns.push('Très peu de logs (activité sporadique)');
+  if (ids === 0 && sshFail < 5 && httpErr < 10) fpSigns.push('Pas d\'indicateurs d\'attaque évidents');
+
+  const verdict = tpSigns.length > fpSigns.length ? 'TP_LIKELY' : fpSigns.length > tpSigns.length ? 'FP_LIKELY' : 'UNCERTAIN';
+  const verdictConf = verdict === 'TP_LIKELY'
+    ? `<div style="background:rgba(248,81,73,0.1);border:1px solid rgba(248,81,73,0.4);border-radius:8px;padding:10px 14px;margin-bottom:10px;display:flex;align-items:center;gap:10px;">
+        <i class="fas fa-exclamation-triangle" style="color:var(--red);font-size:1.1rem;"></i>
+        <div><div style="font-size:0.82rem;font-weight:700;color:var(--red);">Probablement TP — Attaque réelle</div>
+        <div style="font-size:0.7rem;color:var(--muted);">Les indicateurs pointent vers une attaque active</div></div></div>`
+    : verdict === 'FP_LIKELY'
+    ? `<div style="background:rgba(63,185,80,0.1);border:1px solid rgba(63,185,80,0.4);border-radius:8px;padding:10px 14px;margin-bottom:10px;display:flex;align-items:center;gap:10px;">
+        <i class="fas fa-check-circle" style="color:var(--green);font-size:1.1rem;"></i>
+        <div><div style="font-size:0.82rem;font-weight:700;color:var(--green);">Probablement FP — Comportement normal</div>
+        <div style="font-size:0.7rem;color:var(--muted);">L'activité semble légitime</div></div></div>`
+    : `<div style="background:rgba(227,179,65,0.1);border:1px solid rgba(227,179,65,0.4);border-radius:8px;padding:10px 14px;margin-bottom:10px;display:flex;align-items:center;gap:10px;">
+        <i class="fas fa-question-circle" style="color:var(--yellow);font-size:1.1rem;"></i>
+        <div><div style="font-size:0.82rem;font-weight:700;color:var(--yellow);">Incertain — Analyse manuelle nécessaire</div>
+        <div style="font-size:0.7rem;color:var(--muted);">Indices contradictoires</div></div></div>`;
+
+  let decisionHtml = verdictConf;
+  if (tpSigns.length) {
+    decisionHtml += `<div style="margin-bottom:8px;"><div style="font-size:0.65rem;color:var(--red);text-transform:uppercase;letter-spacing:1px;margin-bottom:4px;"><i class="fas fa-skull-crossbones me-1"></i>Indicateurs TP</div>
+      ${tpSigns.map(s=>`<div style="font-size:0.75rem;color:var(--text);padding:3px 0 3px 12px;border-left:2px solid var(--red);margin-bottom:3px;">${s}</div>`).join('')}</div>`;
+  }
+  if (fpSigns.length) {
+    decisionHtml += `<div><div style="font-size:0.65rem;color:var(--green);text-transform:uppercase;letter-spacing:1px;margin-bottom:4px;"><i class="fas fa-shield-alt me-1"></i>Indicateurs FP</div>
+      ${fpSigns.map(s=>`<div style="font-size:0.75rem;color:var(--text);padding:3px 0 3px 12px;border-left:2px solid var(--green);margin-bottom:3px;">${s}</div>`).join('')}</div>`;
+  }
+  document.getElementById('dw-decision').innerHTML = decisionHtml;
+
+  // ── Logs récents ──────────────────────────────────────────────────
+  const logHits = logsR.hits || [];
+  if (logHits.length) {
+    let lHtml = `<table style="width:100%;font-size:0.71rem;border-collapse:collapse;">
+      <thead><tr>
+        <th style="color:var(--muted);font-weight:500;padding:3px 5px;text-align:left;font-size:0.63rem;text-transform:uppercase;letter-spacing:0.8px;">Heure</th>
+        <th style="color:var(--muted);font-weight:500;padding:3px 5px;font-size:0.63rem;text-transform:uppercase;letter-spacing:0.8px;">Type</th>
+        <th style="color:var(--muted);font-weight:500;padding:3px 5px;font-size:0.63rem;text-transform:uppercase;letter-spacing:0.8px;">Sév.</th>
+        <th style="color:var(--muted);font-weight:500;padding:3px 5px;font-size:0.63rem;text-transform:uppercase;letter-spacing:0.8px;">Message</th>
+      </tr></thead><tbody>`;
+    logHits.forEach(l => {
+      const ls  = l.severity || 'info';
+      const lts = (l['@timestamp']||'').slice(11,19);
+      const lmsg = (l.message||'').slice(0,55);
+      lHtml += `<tr style="border-top:1px solid #21262d;">
+        <td style="padding:4px 5px;font-family:monospace;color:var(--muted);white-space:nowrap;">${esc(lts)}</td>
+        <td style="padding:4px 5px;"><span class="type-mono" style="font-size:0.62rem;">${esc(l.log_type||'?')}</span></td>
+        <td style="padding:4px 5px;"><span class="badge-sev sev-${ls}" style="font-size:0.58rem;padding:1px 5px;">${ls}</span></td>
+        <td style="padding:4px 5px;max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--muted);" title="${esc(l.message||'')}">${esc(lmsg)}</td>
+      </tr>`;
+    });
+    lHtml += '</tbody></table>';
+    document.getElementById('dw-logs').innerHTML = lHtml;
+  } else {
+    document.getElementById('dw-logs').innerHTML = '<span style="color:var(--muted);font-size:0.75rem;">Aucun log dans les 24h pour cette IP.</span>';
+  }
+
+  // ── Incidents liés ────────────────────────────────────────────────
+  const incidents = p.incidents || [];
+  if (incidents.length) {
+    const incHtml = incidents.map(i => {
+      const sc = i.severity === 'critical' ? 'var(--red)' : i.severity === 'high' ? 'var(--orange)' : i.severity === 'medium' ? 'var(--yellow)' : 'var(--green)';
+      return `<div style="border:1px solid var(--border);border-radius:6px;padding:8px 10px;margin-bottom:6px;">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:3px;">
+          <span style="font-size:0.72rem;font-weight:600;color:${sc};">${esc(i.severity||'?').toUpperCase()}</span>
+          <span style="font-size:0.68rem;color:var(--muted);">${esc((i.created_at||'').slice(0,10))}</span>
+        </div>
+        <div style="font-size:0.78rem;color:var(--text);">${esc(i.title||i.incident_id||'—')}</div>
+        <div style="font-size:0.68rem;color:var(--muted);margin-top:2px;">
+          Statut: <span style="color:var(--blue);">${esc(i.status||'?')}</span>
+          ${i.llm_verdict ? ` · LLM: <span style="color:var(--purple);">${esc(i.llm_verdict)}</span>` : ''}
+        </div>
+      </div>`;
+    }).join('');
+    document.getElementById('dw-incidents').innerHTML = incHtml +
+      `<a href="/incidents" style="font-size:0.72rem;color:var(--blue);text-decoration:none;display:block;text-align:right;">
+        Voir tous les incidents <i class="fas fa-external-link-alt" style="font-size:0.6rem;"></i></a>`;
+  } else {
+    document.getElementById('dw-incidents').innerHTML =
+      `<div style="font-size:0.75rem;color:var(--muted);">Aucun incident lié à cette IP.
+        <a href="/incidents" style="color:var(--blue);margin-left:8px;">Voir incidents →</a></div>`;
+  }
+}
+
+const _iaExpandCache = {};
+
+async function toggleIAExpand(idx) {
+  const row  = document.getElementById('ia-exprow-' + idx);
+  const icon = document.getElementById('ia-expicon-' + idx);
+  if (!row) return;
+  const wasOpen = row.classList.contains('open');
+  row.classList.toggle('open');
+  icon.classList.toggle('fa-chevron-down');
+  icon.classList.toggle('fa-chevron-up');
+  if (!wasOpen && !_iaExpandCache[idx]) {
+    _iaExpandCache[idx] = true;
+    await renderIAInlinePanel(idx, _hits[idx]);
+  }
+}
+
+// Feature labels for IF / DL models
+const FEATURE_META = {
+  is_failed:      { label: 'Échec d\'auth',    icon: 'fa-times-circle',    tp: true  },
+  is_invalid_usr: { label: 'Utilisateur invalide', icon: 'fa-user-slash',  tp: true  },
+  is_sshd_auth:   { label: 'Auth SSH/SSHD',    icon: 'fa-terminal',        tp: false },
+  has_src_ip:     { label: 'IP source présente', icon: 'fa-network-wired', tp: true  },
+  is_session_ok:  { label: 'Session ouverte',  icon: 'fa-door-open',       tp: false },
+  hour_of_day:    { label: 'Heure (normalisée)',icon: 'fa-clock',           tp: null  },
+  is_night:       { label: 'Heure nocturne',   icon: 'fa-moon',            tp: true  },
+  is_web_attack:  { label: 'Signature web malveillante', icon: 'fa-spider', tp: true },
+};
+
+async function renderIAInlinePanel(idx, h) {
+  const el = document.getElementById('ia-expcontent-' + idx);
+  if (!el || !h) return;
+
+  const score    = parseFloat(h.anomaly_score || 0);
+  const ip       = h.src_ip || '';
+  const ts       = h['@timestamp'] || '';
+  const logType  = h.log_type || '';
+  const sev      = h.severity || 'medium';
+  const features = h.features || {};
+  const reconLoss= parseFloat(h.reconstruction_loss || 0);
+  const threshold= parseFloat(h.threshold || 0);
+  const model    = h.alert_type || _currentModel;
+  const isDL     = model === 'autoencoder' || _currentModel === 'dl';
+
+  // ── Section 1 : Features de l'anomalie (les VRAIES raisons) ──
+  const tpSigns = [], fpSigns = [];
+  let featHtml = '';
+
+  if (Object.keys(features).length > 0) {
+    const rows = Object.entries(features).map(([k, v]) => {
+      const meta = FEATURE_META[k] || { label: k, icon: 'fa-tag', tp: null };
+      const val  = typeof v === 'number' && v <= 1.0 && v >= 0 && Number.isInteger(v * 100 / 100)
+                 ? (v > 0 ? 'OUI' : 'NON')
+                 : typeof v === 'number' ? v.toFixed(2) : String(v);
+      const isActive = v > 0.5;
+      let color = 'var(--muted)';
+      if (isActive && meta.tp === true)  { color = 'var(--red)';   tpSigns.push(meta.label); }
+      if (isActive && meta.tp === false) { color = 'var(--green)'; fpSigns.push(meta.label + ' présente'); }
+      if (!isActive && meta.tp === true) { color = 'var(--green)'; }
+      return `<tr style="border-top:1px solid #21262d;">
+        <td style="padding:4px 8px;font-size:0.72rem;color:var(--muted);white-space:nowrap;">
+          <i class="fas ${meta.icon} me-1" style="color:${color};width:12px;"></i>${meta.label}
+        </td>
+        <td style="padding:4px 8px;font-family:monospace;font-size:0.75rem;font-weight:700;color:${color};">${val}</td>
+        <td style="padding:4px 8px;font-size:0.65rem;color:${isActive && meta.tp === true ? 'var(--red)' : isActive && meta.tp === false ? 'var(--green)' : 'var(--muted)'};">
+          ${isActive && meta.tp === true ? '▲ suspect' : isActive && meta.tp === false ? '✓ normal' : '–'}
+        </td>
+      </tr>`;
+    }).join('');
+
+    featHtml = `<div style="overflow-x:auto;">
+      <table style="width:100%;border-collapse:collapse;">
+        <thead><tr>
+          <th style="color:var(--muted);font-size:0.6rem;padding:3px 8px;text-align:left;font-weight:500;text-transform:uppercase;letter-spacing:0.8px;">Feature</th>
+          <th style="color:var(--muted);font-size:0.6rem;padding:3px 8px;font-weight:500;text-transform:uppercase;letter-spacing:0.8px;">Valeur</th>
+          <th style="color:var(--muted);font-size:0.6rem;padding:3px 8px;font-weight:500;text-transform:uppercase;letter-spacing:0.8px;">Interprétation</th>
+        </tr></thead>
+        <tbody>${rows}</tbody>
+      </table>
+    </div>`;
+
+    if (isDL && reconLoss > 0) {
+      const reconPct = Math.min(100, Math.round((reconLoss / Math.max(threshold, 0.001)) * 100));
+      const reconColor = reconLoss > threshold * 2 ? 'var(--red)' : reconLoss > threshold ? 'var(--orange)' : 'var(--green)';
+      if (reconLoss > threshold * 1.5) tpSigns.push(`Erreur reconstruction DL très élevée (×${(reconLoss/threshold).toFixed(1)} seuil)`);
+      featHtml += `<div style="margin-top:8px;background:var(--bg3);border-radius:6px;padding:8px 12px;display:flex;align-items:center;gap:12px;">
+        <div style="font-size:0.68rem;color:var(--muted);">Erreur reconstruc. DL :</div>
+        <div style="flex:1;background:var(--bg2);border-radius:4px;height:6px;overflow:hidden;">
+          <div style="width:${reconPct}%;height:100%;background:${reconColor};border-radius:4px;transition:width .4s;"></div>
+        </div>
+        <div style="font-family:monospace;font-size:0.75rem;font-weight:700;color:${reconColor};">${reconLoss.toFixed(4)}</div>
+        <div style="font-size:0.65rem;color:var(--muted);">seuil: ${threshold.toFixed(4)}</div>
+      </div>`;
+    }
+  }
+
+  // Ajouter indicateurs basés sur le score
+  if (score >= 0.7)      tpSigns.push(`Score anomalie très élevé : ${score.toFixed(3)}`);
+  else if (score >= 0.4) tpSigns.push(`Score anomalie élevé : ${score.toFixed(3)}`);
+  else                   fpSigns.push(`Score anomalie faible : ${score.toFixed(3)}`);
+
+  const verdict = tpSigns.length > fpSigns.length ? 'TP_LIKELY'
+                : fpSigns.length > tpSigns.length ? 'FP_LIKELY' : 'UNCERTAIN';
+  const bStyle = verdict === 'TP_LIKELY'
+    ? 'background:rgba(248,81,73,0.1);border:1px solid rgba(248,81,73,0.4);'
+    : verdict === 'FP_LIKELY'
+    ? 'background:rgba(63,185,80,0.1);border:1px solid rgba(63,185,80,0.4);'
+    : 'background:rgba(227,179,65,0.1);border:1px solid rgba(227,179,65,0.4);';
+  const bColor = verdict === 'TP_LIKELY' ? 'var(--red)' : verdict === 'FP_LIKELY' ? 'var(--green)' : 'var(--yellow)';
+  const bIcon  = verdict === 'TP_LIKELY' ? 'fa-exclamation-triangle' : verdict === 'FP_LIKELY' ? 'fa-check-circle' : 'fa-question-circle';
+  const bLabel = verdict === 'TP_LIKELY' ? 'Probablement TP — Attaque réelle'
+               : verdict === 'FP_LIKELY' ? 'Probablement FP — Comportement normal'
+               : 'Incertain — Vérifier manuellement';
+
+  let html = `<div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;flex-wrap:wrap;">
+
+    <!-- Colonne gauche : features + logs -->
+    <div>
+      <div style="font-size:0.62rem;color:var(--blue);text-transform:uppercase;letter-spacing:1px;margin-bottom:8px;">
+        <i class="fas fa-fingerprint me-1"></i>Caractéristiques du log détecté
+      </div>
+      ${featHtml || '<span style="font-size:0.72rem;color:var(--muted);">Aucune feature disponible pour ce modèle.</span>'}
+    </div>
+
+    <!-- Colonne droite : verdict + indicateurs -->
+    <div>
+      <div style="font-size:0.62rem;color:var(--yellow);text-transform:uppercase;letter-spacing:1px;margin-bottom:8px;">
+        <i class="fas fa-balance-scale me-1"></i>Analyse TP / FP
+      </div>
+      <div class="ia-verdict-banner" style="${bStyle}">
+        <i class="fas ${bIcon}" style="color:${bColor};font-size:1.1rem;"></i>
+        <div>
+          <div style="font-size:0.82rem;font-weight:700;color:${bColor};">${bLabel}</div>
+          <div style="font-size:0.65rem;color:var(--muted);margin-top:2px;">
+            Modèle : ${model} · Score : ${score.toFixed(3)} · Type : ${esc(logType)}
+            ${ip ? ' · IP : <span style="font-family:monospace;color:var(--blue);">' + esc(ip) + '</span>' : ''}
+          </div>
+        </div>
+      </div>`;
+
+  if (tpSigns.length) {
+    html += `<div style="margin-bottom:8px;">
+      <div style="font-size:0.6rem;color:var(--red);text-transform:uppercase;letter-spacing:1px;margin-bottom:4px;">
+        <i class="fas fa-skull-crossbones me-1"></i>Indices TP (${tpSigns.length})
+      </div>
+      ${tpSigns.map(s=>`<div style="font-size:0.72rem;color:var(--text);padding:3px 0 3px 10px;border-left:2px solid var(--red);margin-bottom:3px;">${s}</div>`).join('')}
+    </div>`;
+  }
+  if (fpSigns.length) {
+    html += `<div>
+      <div style="font-size:0.6rem;color:var(--green);text-transform:uppercase;letter-spacing:1px;margin-bottom:4px;">
+        <i class="fas fa-shield-alt me-1"></i>Indices FP (${fpSigns.length})
+      </div>
+      ${fpSigns.map(s=>`<div style="font-size:0.72rem;color:var(--text);padding:3px 0 3px 10px;border-left:2px solid var(--green);margin-bottom:3px;">${s}</div>`).join('')}
+    </div>`;
+  }
+
+  html += `</div></div>`;
+
+  // Section logs liés (±5min autour du timestamp)
+  html += `<div style="margin-top:12px;padding-top:10px;border-top:1px solid var(--border);">
+    <div style="font-size:0.62rem;color:var(--muted);text-transform:uppercase;letter-spacing:1px;margin-bottom:8px;">
+      <i class="fas fa-stream me-1"></i>Logs bruts — contexte ±5min
+      ${ts ? '<span style="font-weight:400;text-transform:none;letter-spacing:0;margin-left:6px;color:var(--muted);">autour de ' + ts.slice(11,19) + '</span>' : ''}
+    </div>
+    <div id="ia-inlinelogs-${idx}"><i class="fas fa-spinner fa-spin" style="color:var(--muted);font-size:0.75rem;"></i></div>
+  </div>`;
+
+  // Actions
+  const ipStr = ip.replace(/'/g, "\\'");
+  const tsStr = ts.replace(/'/g, "\\'");
+  html += `<div style="display:flex;gap:8px;margin-top:12px;padding-top:10px;border-top:1px solid var(--border);flex-wrap:wrap;align-items:center;">
+    <span style="font-size:0.68rem;color:var(--muted);flex:1;"><i class="fas fa-gavel me-1"></i>Labelliser :</span>
+    <button class="label-btn btn-tp"  style="font-size:0.78rem;padding:5px 14px;" onclick="label('${ipStr}','${tsStr}','TP',this)"><i class="fas fa-check me-1"></i>Vrai Positif (TP)</button>
+    <button class="label-btn btn-fp"  style="font-size:0.78rem;padding:5px 14px;" onclick="label('${ipStr}','${tsStr}','FP',this)"><i class="fas fa-times me-1"></i>Faux Positif (FP)</button>
+    <button class="label-btn btn-ben" style="font-size:0.78rem;padding:5px 14px;" onclick="label('${ipStr}','${tsStr}','Benign',this)"><i class="fas fa-minus me-1"></i>Bénin</button>
+    <button class="label-btn" style="background:rgba(88,166,255,0.1);color:var(--blue);border:1px solid var(--blue);font-size:0.78rem;padding:5px 10px;" onclick="openDetail(${idx})"><i class="fas fa-search-plus me-1"></i>Détail complet</button>
+  </div>`;
+
+  el.innerHTML = html;
+
+  // Charger les logs réels en async
+  const logEl = document.getElementById(`ia-inlinelogs-${idx}`);
+  if (logEl) {
+    let logUrl;
+    if (ip) {
+      const tsFrom = ts ? new Date(new Date(ts).getTime() - 5*60000).toISOString() : 'now-30m';
+      const tsTo   = ts ? new Date(new Date(ts).getTime() + 5*60000).toISOString() : 'now';
+      logUrl = `/api/logs?src_ip=${encodeURIComponent(ip)}&size=8&date_from=${encodeURIComponent(tsFrom)}&date_to=${encodeURIComponent(tsTo)}`;
+    } else if (ts) {
+      const tsFrom = new Date(new Date(ts).getTime() - 3*60000).toISOString();
+      const tsTo   = new Date(new Date(ts).getTime() + 3*60000).toISOString();
+      logUrl = `/api/logs?size=8&date_from=${encodeURIComponent(tsFrom)}&date_to=${encodeURIComponent(tsTo)}`;
+    }
+    if (logUrl) {
+      fetch(logUrl).then(r=>r.json()).catch(()=>({hits:[]})).then(lr => {
+        const logHits = lr.hits || [];
+        if (!logHits.length) {
+          logEl.innerHTML = '<span style="font-size:0.72rem;color:var(--muted);">Aucun log trouvé dans la fenêtre temporelle.</span>';
+          return;
+        }
+        let lt = `<div style="overflow-x:auto;max-height:180px;overflow-y:auto;border-radius:6px;border:1px solid var(--border);">
+          <table style="width:100%;font-size:0.7rem;border-collapse:collapse;">
+          <thead style="position:sticky;top:0;background:var(--bg3);"><tr>
+            <th style="color:var(--muted);font-size:0.6rem;padding:4px 8px;text-align:left;font-weight:500;">Heure</th>
+            <th style="color:var(--muted);font-size:0.6rem;padding:4px 8px;font-weight:500;">Type</th>
+            <th style="color:var(--muted);font-size:0.6rem;padding:4px 8px;font-weight:500;">Sév.</th>
+            <th style="color:var(--muted);font-size:0.6rem;padding:4px 8px;font-weight:500;">Message brut</th>
+          </tr></thead><tbody>`;
+        logHits.forEach(l => {
+          const lts = (l['@timestamp']||'').slice(11,19);
+          const ls  = l.severity || 'info';
+          const msg = (l.message||l.short_message||'').slice(0,100);
+          const scl = ls==='critical'?'var(--red)':ls==='high'?'var(--orange)':ls==='medium'?'var(--yellow)':'var(--muted)';
+          lt += `<tr style="border-top:1px solid #21262d;">
+            <td style="padding:4px 8px;font-family:monospace;color:var(--muted);white-space:nowrap;">${esc(lts)}</td>
+            <td style="padding:4px 8px;"><span class="type-mono" style="font-size:0.6rem;">${esc(l.log_type||'?')}</span></td>
+            <td style="padding:4px 8px;font-size:0.65rem;color:${scl};font-weight:600;">${ls}</td>
+            <td style="padding:4px 8px;color:var(--text);font-family:monospace;font-size:0.65rem;max-width:320px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${esc(l.message||'')}">${esc(msg)}</td>
+          </tr>`;
+        });
+        lt += '</tbody></table></div>';
+        logEl.innerHTML = lt;
+      });
+    } else {
+      logEl.innerHTML = '<span style="font-size:0.72rem;color:var(--muted);">IP et timestamp non disponibles pour ce log.</span>';
+    }
+  }
+}
+
+function labelDrawer(srcIp, anomalyTs, verdict, model, btn) {
+  btn.disabled = true;
+  const orig = btn.innerHTML;
+  btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
+  fetch('/api/anomaly/label', {
+    method: 'POST',
+    headers: {'Content-Type':'application/json'},
+    body: JSON.stringify({ model, src_ip: srcIp, anomaly_ts: anomalyTs, verdict })
+  })
+  .then(r => r.json())
+  .then(() => {
+    const colors = { TP: '#3fb950', FP: '#f85149', Benign: '#58a6ff' };
+    showToast(`<i class="fas fa-check me-2" style="color:${colors[verdict]}"></i>Labellisé : <strong>${verdict}</strong>`, colors[verdict]);
+    loadMetrics();
+    btn.innerHTML = orig;
+    btn.style.opacity = '0.4';
+    btn.disabled = false;
+  })
+  .catch(() => { btn.innerHTML = orig; btn.disabled = false; });
+}
+</script>
+
+<!-- Detail Drawer -->
+<div id="detailDrawer" style="position:fixed;top:0;right:-520px;width:500px;max-width:96vw;height:100vh;background:var(--bg2);border-left:1px solid var(--border);z-index:2000;overflow-y:auto;transition:right 0.28s cubic-bezier(.4,0,.2,1);box-shadow:-6px 0 32px rgba(0,0,0,0.5);">
+  <!-- Sticky header -->
+  <div style="position:sticky;top:0;background:var(--bg2);border-bottom:1px solid var(--border);padding:14px 18px;display:flex;align-items:center;justify-content:space-between;z-index:1;">
+    <div id="dw-title" style="font-size:0.88rem;font-weight:700;color:var(--text);flex:1;"></div>
+    <button onclick="closeDrawer()" style="background:var(--bg3);border:1px solid var(--border);color:var(--muted);border-radius:6px;padding:4px 10px;cursor:pointer;font-size:0.9rem;line-height:1;transition:color .15s;" onmouseover="this.style.color='var(--text)'" onmouseout="this.style.color='var(--muted)'">
+      <i class="fas fa-times"></i>
+    </button>
+  </div>
+
+  <div style="padding:16px 18px;">
+    <!-- Score + type + label buttons -->
+    <div id="dw-meta"></div>
+
+    <!-- Profil IP complet -->
+    <div style="font-size:0.65rem;text-transform:uppercase;letter-spacing:1.2px;color:var(--blue);margin-bottom:8px;">
+      <i class="fas fa-chart-bar me-1"></i>Profil IP — 24h
+    </div>
+    <div id="dw-profile" style="margin-bottom:14px;"></div>
+
+    <!-- Aide à la décision TP/FP -->
+    <div style="font-size:0.65rem;text-transform:uppercase;letter-spacing:1.2px;color:var(--yellow);margin-bottom:8px;">
+      <i class="fas fa-balance-scale me-1"></i>Analyse TP / FP
+    </div>
+    <div id="dw-decision" style="margin-bottom:14px;"></div>
+
+    <!-- Logs récents -->
+    <div style="font-size:0.65rem;text-transform:uppercase;letter-spacing:1.2px;color:var(--muted);margin-bottom:8px;">
+      <i class="fas fa-stream me-1"></i>Logs récents (même IP, 24h)
+    </div>
+    <div id="dw-logs" style="background:var(--bg3);border-radius:8px;padding:8px;margin-bottom:14px;overflow-x:auto;max-height:200px;overflow-y:auto;"></div>
+
+    <!-- Incidents liés -->
+    <div style="font-size:0.65rem;text-transform:uppercase;letter-spacing:1.2px;color:var(--orange);margin-bottom:8px;">
+      <i class="fas fa-ticket-alt me-1"></i>Incidents liés à cette IP
+    </div>
+    <div id="dw-incidents" style="margin-bottom:14px;"></div>
+  </div>
+</div>
+<div id="drawerOverlay" onclick="closeDrawer()" style="display:none;position:fixed;inset:0;z-index:1999;background:rgba(0,0,0,0.4);"></div>
+
+<style>
+  #detailDrawer.open { right: 0 !important; }
+  #detailDrawer.open ~ #drawerOverlay, #drawerOverlay:has(~ #detailDrawer.open) { display:block; }
+  /* simpler: toggle overlay via JS */
+</style>
+<script>
+const _origOpenDetail = openDetail;
+function openDetail(idx) {
+  _origOpenDetail(idx);
+  document.getElementById('drawerOverlay').style.display = 'block';
+}
+const _origClose = closeDrawer;
+function closeDrawer() {
+  document.getElementById('detailDrawer').classList.remove('open');
+  document.getElementById('drawerOverlay').style.display = 'none';
+}
+</script>
+
+{% endblock %}

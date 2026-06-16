@@ -1,0 +1,32 @@
+{
+  "shifts": [
+    {
+      "name": "Matin",
+      "color": "blue",
+      "icon": "fa-sun",
+      "start": "06:00",
+      "end": "14:00",
+      "members": [],
+      "description": "Shift du matin — 06h à 14h"
+    },
+    {
+      "name": "Après-midi",
+      "color": "orange",
+      "icon": "fa-cloud-sun",
+      "start": "14:00",
+      "end": "22:00",
+      "members": [],
+      "description": "Shift après-midi — 14h à 22h"
+    },
+    {
+      "name": "Nuit",
+      "color": "purple",
+      "icon": "fa-moon",
+      "start": "22:00",
+      "end": "06:00",
+      "members": [],
+      "description": "Shift nuit — 22h à 06h"
+    }
+  ],
+  "history": []
+}

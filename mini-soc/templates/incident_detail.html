@@ -1,0 +1,772 @@
+{% extends "base.html" %}
+{% block title %}Incident {{ inc.get('incident_id', inc.id[:8]|upper) }}{% endblock %}
+{% block content %}
+
+{% set sev = inc.get('severity','medium') %}
+{% set status = inc.get('status','awaiting_action') %}
+{% set verdict = inc.get('verdict','none') %}
+{% set sev_color = 'var(--red)' if sev=='critical' else 'var(--orange)' if sev=='high' else 'var(--yellow)' if sev=='medium' else 'var(--green)' %}
+
+<style>
+  .detail-label { font-size:0.68rem; text-transform:uppercase; letter-spacing:1px; color:var(--muted); margin-bottom:3px; }
+  .detail-val   { font-size:0.88rem; color:var(--text); }
+  .note-item    { border-left:2px solid var(--border); padding:6px 12px; margin-bottom:6px; font-size:0.78rem; }
+  .timeline-dot { width:8px; height:8px; border-radius:50%; background:var(--blue); flex-shrink:0; margin-top:5px; }
+  .form-ctrl    { background:var(--bg3); border:1px solid var(--border); color:var(--text); border-radius:6px; padding:6px 10px; font-size:0.82rem; width:100%; }
+  .form-ctrl:focus { outline:none; border-color:var(--blue); }
+  .badge-level  { display:inline-block; padding:2px 8px; border-radius:10px; font-size:0.65rem; font-weight:600; }
+  .badge-L1     { background:rgba(88,166,255,0.15); color:var(--blue); border:1px solid rgba(88,166,255,0.4); }
+  .badge-L2     { background:rgba(255,166,87,0.15); color:var(--orange); border:1px solid rgba(255,166,87,0.4); }
+  .badge-L3     { background:rgba(248,81,73,0.15); color:var(--red); border:1px solid rgba(248,81,73,0.4); }
+  .modal-overlay { display:none; position:fixed; inset:0; background:rgba(0,0,0,0.7); z-index:1000; align-items:center; justify-content:center; }
+  .modal-overlay.open { display:flex; }
+  .modal-box { background:var(--bg2); border:1px solid var(--border); border-radius:12px; padding:28px; width:480px; max-width:95vw; }
+</style>
+
+<!-- Breadcrumb -->
+<div style="font-size:0.78rem; color:var(--muted); margin-bottom:12px;">
+  <a href="/incidents" style="color:var(--blue); text-decoration:none;"><i class="fas fa-shield-alt me-1"></i>Incidents</a>
+  <span class="mx-2">›</span>
+  <span style="font-family:monospace; color:var(--text);">{{ inc.get('incident_id', inc.id[:8]|upper) }}</span>
+</div>
+
+<!-- Header -->
+<div style="background:var(--bg2); border:1px solid var(--border); border-radius:10px; border-left:4px solid {{ sev_color }}; padding:20px 24px; margin-bottom:20px;">
+  <div class="d-flex align-items-flex-start justify-content-between flex-wrap gap-3">
+    <div style="flex:1; min-width:260px;">
+      <div class="d-flex align-items-center gap-2 flex-wrap mb-2">
+        <span style="font-family:monospace; font-size:0.78rem; color:var(--muted);">{{ inc.get('incident_id', inc.id[:8]|upper) }}</span>
+        <span class="badge-sev sev-{{ sev }}">{{ sev|upper }}</span>
+        {% if status == 'closed' %}
+          <span style="background:rgba(63,185,80,0.1); color:var(--green); border:1px solid var(--green); border-radius:10px; font-size:0.65rem; padding:2px 8px;">
+            <i class="fas fa-check-circle me-1"></i>Closed
+          </span>
+        {% elif status == 'in_progress' %}
+          <span style="background:rgba(255,166,87,0.1); color:var(--orange); border:1px solid var(--orange); border-radius:10px; font-size:0.65rem; padding:2px 8px;">
+            <i class="fas fa-spinner me-1"></i>In Progress
+          </span>
+        {% else %}
+          <span style="background:rgba(139,148,158,0.1); color:var(--muted); border:1px solid var(--border); border-radius:10px; font-size:0.65rem; padding:2px 8px;">
+            <i class="fas fa-shield-alt me-1"></i>Awaiting Action
+          </span>
+        {% endif %}
+        {% if verdict == 'true_positive' %}
+          <span style="color:var(--green); font-size:0.72rem; font-weight:600;"><i class="fas fa-check me-1"></i>True Positive</span>
+        {% elif verdict == 'false_positive' %}
+          <span style="color:var(--red); font-size:0.72rem; font-weight:600;"><i class="fas fa-times me-1"></i>False Positive</span>
+        {% endif %}
+        {% if inc.get('auto_labeled') %}
+          <span style="background:rgba(210,168,255,0.15); color:var(--purple); border:1px solid rgba(210,168,255,0.4); border-radius:10px; font-size:0.65rem; padding:2px 8px;">
+            <i class="fas fa-robot me-1"></i>Auto-étiqueté
+          </span>
+        {% endif %}
+      </div>
+      <h5 style="margin:0 0 8px; font-weight:700; color:var(--text);">{{ inc.get('title','?') }}</h5>
+      {% if inc.get('description') %}
+      <div style="font-size:0.8rem; color:var(--muted); line-height:1.5;">{{ inc.get('description') }}</div>
+      {% endif %}
+    </div>
+    <!-- Action buttons -->
+    <div class="d-flex flex-column gap-2" style="min-width:160px;">
+      {% if current_user and current_user.level in ('L2','L3') %}
+      <button onclick="document.getElementById('modalUpdate').classList.add('open')" class="btn-soc btn-soc-primary" style="justify-content:center;">
+        <i class="fas fa-pencil-alt me-1"></i>Modifier
+      </button>
+      {% endif %}
+      {% if current_user and current_user.level == 'L3' %}
+      <button onclick="document.getElementById('modalDelegate').classList.add('open')" class="btn-soc" style="justify-content:center; border-color:var(--orange); color:var(--orange);">
+        <i class="fas fa-random me-1"></i>Déléguer
+      </button>
+      {% endif %}
+      {% if current_user and current_user.level in ('L2','L3') and inc.get('src_ip') and inc.get('status') != 'closed' %}
+      <button onclick="applyMitigation()" id="mitigateBtn" class="btn-soc"
+              style="justify-content:center; border-color:rgba(248,81,73,0.4); color:var(--red);"
+              {% if inc.get('mitigated_at') %}disabled title="Déjà appliqué"{% endif %}>
+        <i class="fas fa-ban me-1"></i>{% if inc.get('mitigated_at') %}Bloqué ✓{% else %}Mitiger IP{% endif %}
+      </button>
+      {% endif %}
+      {% if current_user and current_user.level in ('L2','L3') and status != 'closed' %}
+      <button onclick="document.getElementById('modalClose').style.display='flex'"
+              class="btn-soc" style="justify-content:center;border-color:rgba(63,185,80,0.4);color:var(--green);">
+        <i class="fas fa-check-circle me-1"></i>Clôturer
+      </button>
+      {% endif %}
+      {% if current_user and current_user.level in ('L2','L3') %}
+      <button onclick="generateReport(this)" id="reportBtn" class="btn-soc"
+              style="justify-content:center;border-color:rgba(88,166,255,0.4);color:var(--blue);">
+        <i class="fas fa-file-alt me-1"></i>Générer rapport
+      </button>
+      {% if inc.get('post_incident_report') %}
+      <a href="/api/incidents/{{ inc.id }}/report/pdf" class="btn-soc"
+         style="justify-content:center;border-color:rgba(255,166,87,0.4);color:var(--orange);">
+        <i class="fas fa-file-pdf me-1"></i>Télécharger PDF
+      </a>
+      {% endif %}
+      {% endif %}
+      <a href="/incidents" class="btn-soc" style="justify-content:center; text-align:center;">
+        <i class="fas fa-arrow-left me-1"></i>Retour
+      </a>
+    </div>
+  </div>
+</div>
+
+<!-- Metadata grid -->
+<div class="row g-3 mb-3">
+  <!-- Left: key fields -->
+  <div class="col-md-6">
+    <div class="card-section h-100">
+      <div class="section-title"><i class="fas fa-info-circle me-1"></i>Informations</div>
+      <div class="row g-2">
+        <div class="col-6">
+          <div class="detail-label">Type</div>
+          <div class="detail-val"><span class="type-mono">{{ inc.get('type','?') }}</span></div>
+        </div>
+        <div class="col-6">
+          <div class="detail-label">Source</div>
+          <div class="detail-val"><span class="type-mono" style="font-size:0.75rem;">{{ inc.get('source','—') }}</span></div>
+        </div>
+        {% if inc.get('src_ip') %}
+        <div class="col-6">
+          <div class="detail-label">IP Source</div>
+          <div class="detail-val">
+            <span style="font-family:monospace; color:var(--red);">{{ inc.get('src_ip') }}</span>
+            <a href="/logs?src_ip={{ inc.get('src_ip') }}" title="Voir logs" style="color:var(--muted); font-size:0.7rem; margin-left:6px;">
+              <i class="fas fa-search"></i>
+            </a>
+            {% if inc.get('geoip') %}
+              <span style="font-size:0.72rem; color:var(--muted); margin-left:6px;">
+                🌍 {{ inc.geoip.get('country','') }}{% if inc.geoip.get('city') %}, {{ inc.geoip.city }}{% endif %}
+                {% if inc.geoip.get('isp') %}<span title="{{ inc.geoip.isp }}" style="cursor:help;"> · {{ inc.geoip.isp[:30] }}</span>{% endif %}
+              </span>
+            {% endif %}
+          </div>
+        </div>
+        {% endif %}
+        {% if inc.get('unified_score') %}
+        <div class="col-6">
+          <div class="detail-label">Score unifié</div>
+          <div class="detail-val" style="font-family:monospace; color:{{ sev_color }}; font-weight:700;">
+            {{ '%.1f'|format(inc.get('unified_score',0)) }}/10
+          </div>
+        </div>
+        {% endif %}
+        <div class="col-6">
+          <div class="detail-label">Assigné à</div>
+          <div class="detail-val">
+            {{ inc.get('assigned_to','None') or 'None' }}
+            {% if inc.get('level') %}
+              <span class="badge-level badge-{{ inc.get('level','L1') }} ms-1">{{ inc.get('level') }}</span>
+            {% endif %}
+          </div>
+        </div>
+        {% if inc.get('cve_id') %}
+        <div class="col-6">
+          <div class="detail-label">CVE</div>
+          <div class="detail-val">
+            <a href="https://nvd.nist.gov/vuln/detail/{{ inc.get('cve_id') }}" target="_blank"
+               style="font-family:monospace; color:var(--red); text-decoration:none; font-size:0.8rem;">
+              {{ inc.get('cve_id') }} <i class="fas fa-external-link-alt" style="font-size:0.6rem;"></i>
+            </a>
+          </div>
+        </div>
+        {% endif %}
+        <div class="col-6">
+          <div class="detail-label">Créé le</div>
+          <div class="detail-val" style="font-size:0.8rem;">{{ inc.get('created_at','')|local_ts }}</div>
+        </div>
+        <div class="col-6">
+          <div class="detail-label">Mis à jour</div>
+          <div class="detail-val" style="font-size:0.8rem;">{{ inc.get('updated_at','')|local_ts }}</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Right: AI analysis -->
+  <div class="col-md-6">
+    <div class="card-section h-100" style="border-left:3px solid var(--purple);">
+      <div class="section-title"><i class="fas fa-brain me-1" style="color:var(--purple);"></i>Analyse IA — Ollama (llama3)</div>
+      <div id="ai-panel" style="background:var(--bg3); border-radius:8px; padding:14px; border:1px solid var(--border); min-height:100px;">
+        <span style="color:var(--muted); font-size:0.78rem;"><i class="fas fa-circle-notch fa-spin me-1"></i>Chargement analyse…</span>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Correlation panel (if src_ip exists) -->
+{% if inc.get('src_ip') %}
+<div class="card-section mb-3" style="border-left:3px solid var(--orange);">
+  <div class="section-title"><i class="fas fa-project-diagram me-1" style="color:var(--orange);"></i>Corrélation automatique — IP {{ inc.get('src_ip') }}</div>
+  <div id="corr-panel" style="font-size:0.82rem;">
+    <span style="color:var(--muted);"><i class="fas fa-circle-notch fa-spin me-1"></i>Analyse de corrélation en cours…</span>
+  </div>
+</div>
+{% endif %}
+
+<!-- Related logs -->
+{% if related_logs %}
+<div class="card-section mb-3">
+  <div class="section-title"><i class="fas fa-file-alt me-1"></i>Logs récents — même IP (24h) <span style="font-size:0.72rem; color:var(--muted); font-weight:400;">{{ related_logs|length }} entrées</span></div>
+  <div style="overflow-x:auto;">
+    <table class="table soc-table mb-0" style="font-size:0.78rem;">
+      <thead>
+        <tr>
+          <th>Timestamp</th>
+          <th>Type</th>
+          <th>Sévérité</th>
+          <th>Tags</th>
+          <th>Message</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>
+      {% for log in related_logs %}
+      {% set ls = log.get('severity','info') %}
+      <tr>
+        <td style="white-space:nowrap; color:var(--muted);">{{ log.get('@timestamp','')|local_ts('%Y-%m-%d %H:%M:%S') }}</td>
+        <td><span class="type-mono">{{ log.get('log_type','—') }}</span></td>
+        <td><span class="badge-sev sev-{{ ls }}">{{ ls }}</span></td>
+        <td>
+          {% set tags = log.get('tags',[]) %}
+          {% if tags is string %}{% set tags = [tags] %}{% endif %}
+          {% for t in tags %}{% if t and t != 'beats_input_codec_plain_applied' %}
+            <span style="background:rgba(88,166,255,0.1); color:var(--blue); border:1px solid rgba(88,166,255,0.3); border-radius:10px; font-size:0.6rem; padding:1px 6px;">{{ t }}</span>
+          {% endif %}{% endfor %}
+        </td>
+        <td style="max-width:300px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">
+          <code style="font-size:0.72rem; color:var(--muted);">{{ (log.get('message','') or '')[:120] }}</code>
+        </td>
+        <td>
+          <a href="/logs/{{ log._index }}/{{ log._id }}" class="btn-soc" style="padding:2px 8px; font-size:0.65rem;">
+            <i class="fas fa-external-link-alt"></i>
+          </a>
+        </td>
+      </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endif %}
+
+<!-- Related incidents -->
+{% if related_incidents %}
+<div class="card-section mb-3">
+  <div class="section-title"><i class="fas fa-link me-1"></i>Incidents liés — même IP <span style="font-size:0.72rem; color:var(--muted); font-weight:400;">{{ related_incidents|length }} incidents</span></div>
+  <div style="display:flex; flex-direction:column; gap:6px;">
+  {% for ri in related_incidents %}
+  {% set rs = ri.get('severity','medium') %}
+  {% set rc = 'var(--red)' if rs=='critical' else 'var(--orange)' if rs=='high' else 'var(--yellow)' if rs=='medium' else 'var(--green)' %}
+  <a href="/incidents/{{ ri.id }}" style="text-decoration:none;">
+    <div style="background:var(--bg3); border:1px solid var(--border); border-radius:8px; padding:10px 14px; display:flex; align-items:center; gap:12px; flex-wrap:wrap;">
+      <span class="badge-sev sev-{{ rs }}" style="font-size:0.65rem;">{{ rs }}</span>
+      <span style="font-size:0.82rem; color:var(--text); flex:1;">{{ ri.get('title','?') }}</span>
+      <span style="font-size:0.72rem; color:var(--muted);">{{ ri.get('created_at','')[:10] }}</span>
+      {% if ri.get('verdict') == 'true_positive' %}
+        <span style="color:var(--green); font-size:0.72rem;"><i class="fas fa-check-circle me-1"></i>TP</span>
+      {% elif ri.get('verdict') == 'false_positive' %}
+        <span style="color:var(--red); font-size:0.72rem;"><i class="fas fa-times-circle me-1"></i>FP</span>
+      {% endif %}
+    </div>
+  </a>
+  {% endfor %}
+  </div>
+</div>
+{% endif %}
+
+<!-- ══ PLAYBOOK CHECKLIST ══ -->
+<div class="card-section mb-3" style="border-left:3px solid var(--cyan);">
+  <div class="d-flex align-items-center justify-content-between mb-2 flex-wrap gap-2">
+    <div class="section-title mb-0">
+      <i class="fas fa-tasks me-1" style="color:var(--cyan);"></i>Checklist playbook
+      <span id="task-count" style="font-size:0.7rem; color:var(--muted); font-weight:400; margin-left:6px;"></span>
+    </div>
+    {% if current_user and current_user.level in ('L2','L3') %}
+    <button onclick="seedTasks()" id="seedBtn" class="btn-soc"
+            style="font-size:0.75rem; padding:4px 12px; border-color:rgba(56,189,248,0.4); color:var(--cyan);">
+      <i class="fas fa-magic me-1"></i>Générer checklist
+    </button>
+    {% endif %}
+  </div>
+  <div id="task-list">
+    <span style="color:var(--muted); font-size:0.78rem;"><i class="fas fa-circle-notch fa-spin me-1"></i>Chargement…</span>
+  </div>
+</div>
+
+<script>
+async function loadTasks() {
+  const container = document.getElementById('task-list');
+  const counter   = document.getElementById('task-count');
+  try {
+    const d = await fetch('/api/incidents/' + INC_ID + '/tasks').then(r => r.json());
+    const tasks = d.tasks || [];
+    counter.textContent = tasks.length ? `${tasks.filter(t=>t.done).length}/${tasks.length} complétées` : '';
+    if (!tasks.length) {
+      container.innerHTML = '<span style="color:var(--muted);font-size:0.78rem;">Aucune tâche. Cliquez sur « Générer checklist » pour initialiser le playbook.</span>';
+      return;
+    }
+    container.innerHTML = tasks.map(t => `
+      <div id="task-${t.id}" class="d-flex align-items-center gap-2 mb-1" style="padding:6px 10px; background:var(--bg3); border-radius:6px; border:1px solid var(--border); ${t.done ? 'opacity:0.55;' : ''}">
+        <input type="checkbox" ${t.done ? 'checked' : ''} onchange="toggleTask('${t.id}', this)"
+               style="cursor:pointer; accent-color:var(--cyan); width:15px; height:15px; flex-shrink:0;">
+        <span style="flex:1; font-size:0.8rem; color:var(--text); ${t.done ? 'text-decoration:line-through;' : ''}">${t.text}</span>
+        {% if current_user and current_user.level in ('L2','L3') %}
+        <button onclick="deleteTask('${t.id}')" style="background:none;border:none;color:var(--muted);font-size:0.75rem;cursor:pointer;padding:0 4px;" title="Supprimer">
+          <i class="fas fa-times"></i>
+        </button>
+        {% endif %}
+      </div>`).join('');
+  } catch(e) {
+    container.innerHTML = '<span style="color:var(--red);font-size:0.78rem;">Erreur de chargement.</span>';
+  }
+}
+
+async function seedTasks() {
+  const btn = document.getElementById('seedBtn');
+  if (!btn) return;
+  btn.disabled = true;
+  btn.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>Génération…';
+  try {
+    const r = await fetch('/api/incidents/' + INC_ID + '/tasks/seed', {method:'POST'});
+    const d = await r.json();
+    if (r.ok) {
+      btn.innerHTML = '<i class="fas fa-check me-1"></i>Checklist générée';
+      btn.style.color = 'var(--green)';
+      await loadTasks();
+    } else {
+      btn.disabled = false;
+      btn.innerHTML = '<i class="fas fa-magic me-1"></i>Générer checklist';
+      alert(d.error || 'Erreur');
+    }
+  } catch(e) {
+    btn.disabled = false;
+    btn.innerHTML = '<i class="fas fa-magic me-1"></i>Générer checklist';
+  }
+}
+
+async function toggleTask(taskId, checkbox) {
+  const row = document.getElementById('task-' + taskId);
+  try {
+    const r = await fetch('/api/incidents/' + INC_ID + '/tasks/' + taskId + '/toggle', {method:'POST'});
+    if (r.ok) {
+      const done = checkbox.checked;
+      const span = row.querySelector('span');
+      if (done) { row.style.opacity = '0.55'; span.style.textDecoration = 'line-through'; }
+      else       { row.style.opacity = '1';    span.style.textDecoration = ''; }
+      await loadTaskCounter();
+    } else {
+      checkbox.checked = !checkbox.checked;
+    }
+  } catch(e) { checkbox.checked = !checkbox.checked; }
+}
+
+async function loadTaskCounter() {
+  const counter = document.getElementById('task-count');
+  try {
+    const d = await fetch('/api/incidents/' + INC_ID + '/tasks').then(r => r.json());
+    const tasks = d.tasks || [];
+    counter.textContent = tasks.length ? `${tasks.filter(t=>t.done).length}/${tasks.length} complétées` : '';
+  } catch(e) {}
+}
+
+async function deleteTask(taskId) {
+  const row = document.getElementById('task-' + taskId);
+  try {
+    const r = await fetch('/api/incidents/' + INC_ID + '/tasks/' + taskId, {method:'DELETE'});
+    if (r.ok) { row.remove(); await loadTaskCounter(); }
+  } catch(e) {}
+}
+
+loadTasks();
+</script>
+
+<!-- Notes timeline -->
+{% if inc.get('notes') %}
+<div class="card-section mb-3">
+  <div class="section-title"><i class="fas fa-comments me-1"></i>Notes & historique</div>
+  <div style="display:flex; flex-direction:column; gap:8px;">
+  {% for note in inc.get('notes',[]) %}
+  <div style="display:flex; gap:10px;">
+    <div class="timeline-dot" style="margin-top:6px;"></div>
+    <div class="note-item" style="flex:1; background:var(--bg3); border-radius:6px; border-left:2px solid var(--border); padding:8px 12px;">
+      <div style="display:flex; align-items:center; gap:8px; margin-bottom:4px;">
+        <span style="color:var(--blue); font-weight:600; font-size:0.78rem;">{{ note.get('author','SOC') }}</span>
+        <span style="color:var(--muted); font-size:0.70rem;">{{ note.get('at','') }}</span>
+      </div>
+      <div style="font-size:0.8rem; color:var(--text);">{{ note.get('text','') }}</div>
+    </div>
+  </div>
+  {% endfor %}
+  </div>
+</div>
+{% endif %}
+
+<!-- Lessons Learned display -->
+{% if inc.get('lessons_learned') %}
+<div class="card-section mb-3" style="border-color:rgba(63,185,80,0.3);">
+  <div class="section-title"><i class="fas fa-graduation-cap me-1" style="color:var(--green);"></i>Lessons Learned</div>
+  <div style="font-size:0.85rem; color:var(--text); line-height:1.6; white-space:pre-wrap;">{{ inc.lessons_learned }}</div>
+</div>
+{% endif %}
+
+<!-- Modal Update (L2+) -->
+{% if current_user and current_user.level in ('L2','L3') %}
+<div class="modal-overlay" id="modalUpdate">
+  <div class="modal-box">
+    <div class="d-flex justify-content-between align-items-center mb-3">
+      <h6 style="color:var(--blue); margin:0;"><i class="fas fa-pencil-alt me-2"></i>Modifier l'incident</h6>
+      <button onclick="document.getElementById('modalUpdate').classList.remove('open')" style="background:none;border:none;color:var(--muted);font-size:1.2rem;cursor:pointer;">×</button>
+    </div>
+    <form method="POST" action="/incidents/{{ inc.id }}/update">
+      <div class="row g-2 mb-2">
+        <div class="col-6">
+          <label style="font-size:0.75rem; color:var(--muted);">Statut</label>
+          <select name="status" class="form-ctrl mt-1">
+            <option value="awaiting_action" {% if status=='awaiting_action' %}selected{% endif %}>Awaiting action</option>
+            <option value="in_progress" {% if status=='in_progress' %}selected{% endif %}>In Progress</option>
+            <option value="closed" {% if status=='closed' %}selected{% endif %}>Closed</option>
+          </select>
+        </div>
+        <div class="col-6">
+          <label style="font-size:0.75rem; color:var(--muted);">Verdict</label>
+          <select name="verdict" class="form-ctrl mt-1">
+            <option value="none" {% if verdict=='none' %}selected{% endif %}>None</option>
+            <option value="true_positive" {% if verdict=='true_positive' %}selected{% endif %}>True Positive</option>
+            <option value="false_positive" {% if verdict=='false_positive' %}selected{% endif %}>False Positive</option>
+            <option value="benign" {% if verdict=='benign' %}selected{% endif %}>Benign</option>
+          </select>
+        </div>
+      </div>
+      <div class="mb-3">
+        <label style="font-size:0.75rem; color:var(--muted);">Ajouter une note</label>
+        <textarea name="note" rows="3" class="form-ctrl mt-1" placeholder="Note de triage, observation…"></textarea>
+      </div>
+      <div class="mb-3">
+        <label style="font-size:0.75rem; color:var(--muted);"><i class="fas fa-graduation-cap me-1"></i>Lessons Learned</label>
+        <textarea name="lessons_learned" rows="2" class="form-ctrl mt-1"
+                  placeholder="Ce qui a bien fonctionné, ce qui aurait pu être mieux…">{{ inc.get('lessons_learned','') }}</textarea>
+      </div>
+      <div class="d-flex gap-2 justify-content-end">
+        <button type="button" onclick="document.getElementById('modalUpdate').classList.remove('open')" class="btn-soc">Annuler</button>
+        <button type="submit" class="btn-soc btn-soc-primary">Enregistrer</button>
+      </div>
+    </form>
+  </div>
+</div>
+{% endif %}
+
+<!-- Modal Delegation (L3 only) -->
+{% if current_user and current_user.level == 'L3' %}
+<div class="modal-overlay" id="modalDelegate">
+  <div class="modal-box">
+    <div class="d-flex justify-content-between align-items-center mb-3">
+      <h6 style="color:var(--orange); margin:0;"><i class="fas fa-random me-2"></i>Déléguer l'incident</h6>
+      <button onclick="document.getElementById('modalDelegate').classList.remove('open')" style="background:none;border:none;color:var(--muted);font-size:1.2rem;cursor:pointer;">×</button>
+    </div>
+    <form method="POST" action="/incidents/{{ inc.id }}/delegate">
+      <div class="mb-2">
+        <label style="font-size:0.75rem; color:var(--muted);">Assigné actuellement</label>
+        <div style="font-size:0.85rem; color:var(--text); padding:6px 0;">
+          {{ inc.get('assigned_to','None') or 'None' }}
+          {% if inc.get('level') %}<span class="badge-level badge-{{ inc.get('level') }} ms-1">{{ inc.get('level') }}</span>{% endif %}
+        </div>
+      </div>
+      <div class="row g-2 mb-2">
+        <div class="col-8">
+          <label style="font-size:0.75rem; color:var(--muted);">Assigner à</label>
+          <select name="target_user" class="form-ctrl mt-1" id="delegateUser" onchange="updateDelegateLevel()">
+            <option value="">— Sélectionner —</option>
+            {% for a in analysts %}
+            <option value="{{ a.name }}" data-level="{{ a.level }}">{{ a.name }} ({{ a.level }})</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="col-4">
+          <label style="font-size:0.75rem; color:var(--muted);">Niveau</label>
+          <select name="target_level" class="form-ctrl mt-1" id="delegateLevel">
+            <option value="L1">L1</option>
+            <option value="L2">L2</option>
+          </select>
+        </div>
+      </div>
+      <div class="mb-3">
+        <label style="font-size:0.75rem; color:var(--muted);">Note (optionnel)</label>
+        <textarea name="note" rows="2" class="form-ctrl mt-1" placeholder="Raison de la délégation…"></textarea>
+      </div>
+      <div class="d-flex gap-2 justify-content-end">
+        <button type="button" onclick="document.getElementById('modalDelegate').classList.remove('open')" class="btn-soc">Annuler</button>
+        <button type="submit" class="btn-soc btn-soc-primary" style="background:rgba(255,166,87,0.15); border-color:var(--orange); color:var(--orange);">
+          <i class="fas fa-random me-1"></i>Déléguer
+        </button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<script>
+function updateDelegateLevel() {
+  const sel = document.getElementById('delegateUser');
+  const opt = sel.options[sel.selectedIndex];
+  const lvl = opt.getAttribute('data-level') || 'L1';
+  document.getElementById('delegateLevel').value = lvl;
+}
+</script>
+{% endif %}
+
+<script>
+const INC_ID = "{{ inc.id }}";
+const INC_IP = "{{ inc.get('src_ip','') }}";
+
+const verdictColor = v => v === 'true_positive' ? 'var(--red)'
+                       : v === 'false_positive' ? 'var(--green)'
+                       : 'var(--yellow)';
+const verdictLabel = v => v === 'true_positive' ? 'VRAI POSITIF'
+                       : v === 'false_positive' ? 'FAUX POSITIF'
+                       : 'INCERTAIN';
+
+async function loadAnalysis() {
+  const panel = document.getElementById('ai-panel');
+  try {
+    const d = await fetch('/api/incidents/' + INC_ID + '/analysis').then(r => r.json());
+    if (d.status === 'pending') {
+      panel.innerHTML = '<span style="color:var(--muted);font-size:0.78rem;"><i class="fas fa-circle-notch fa-spin me-1"></i>Analyse IA en cours… (llama3)</span>';
+      setTimeout(loadAnalysis, 6000);
+    } else if (d.status === 'ready' && d.analysis) {
+      renderAnalysis(d.analysis);
+    } else {
+      panel.innerHTML = '<span style="color:var(--muted);font-size:0.78rem;">Analyse non disponible.</span>';
+    }
+  } catch(e) {
+    panel.innerHTML = '<span style="color:var(--red);font-size:0.78rem;">Erreur: ' + e.message + '</span>';
+  }
+}
+
+function renderAnalysis(a) {
+  const panel = document.getElementById('ai-panel');
+  const vc = verdictColor(a.verdict);
+  const vl = verdictLabel(a.verdict);
+  const conf = a.confidence ? (a.confidence * 100).toFixed(0) + '%' : '—';
+  const threatColor = a.threat_level === 'critique' ? 'var(--red)'
+                    : a.threat_level === 'haute'    ? 'var(--orange)'
+                    : a.threat_level === 'moyenne'  ? 'var(--yellow)'
+                    : 'var(--green)';
+
+  let actionsHtml = '';
+  const actions = a.actions || a.recommended_actions || [];
+  if (actions.length) {
+    actionsHtml = `<div style="margin-top:8px;">
+      <div style="font-size:0.65rem;text-transform:uppercase;letter-spacing:1px;color:var(--muted);margin-bottom:4px;">Actions recommandées</div>
+      ${actions.map(ac => `<div style="font-size:0.74rem;color:var(--text);padding:2px 0;"><i class="fas fa-chevron-right me-1" style="color:var(--blue);font-size:0.6rem;"></i>${ac}</div>`).join('')}
+    </div>`;
+  }
+
+  panel.innerHTML = `
+    <div style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:8px;">
+      <div style="background:rgba(0,0,0,0.3);border-radius:8px;padding:8px 14px;text-align:center;">
+        <div style="font-size:1.1rem;font-weight:800;color:${vc};">${vl}</div>
+        <div style="font-size:0.62rem;color:var(--muted);">Verdict</div>
+      </div>
+      <div style="background:rgba(0,0,0,0.3);border-radius:8px;padding:8px 14px;text-align:center;">
+        <div style="font-size:1.1rem;font-weight:800;color:${vc};">${conf}</div>
+        <div style="font-size:0.62rem;color:var(--muted);">Confiance</div>
+      </div>
+      ${a.threat_level ? `<div style="background:rgba(0,0,0,0.3);border-radius:8px;padding:8px 14px;text-align:center;">
+        <div style="font-size:1.1rem;font-weight:800;color:${threatColor};">${a.threat_level}</div>
+        <div style="font-size:0.62rem;color:var(--muted);">Niveau menace</div>
+      </div>` : ''}
+      ${a.attack_type ? `<div style="background:rgba(0,0,0,0.3);border-radius:8px;padding:8px 14px;text-align:center;">
+        <div style="font-size:0.78rem;font-weight:700;color:var(--text);max-width:120px;">${a.attack_type}</div>
+        <div style="font-size:0.62rem;color:var(--muted);">Type d'attaque</div>
+      </div>` : ''}
+    </div>
+    ${a.summary ? `<div style="font-size:0.78rem;color:var(--muted);line-height:1.5;border-top:1px solid var(--border);padding-top:8px;">${a.summary}</div>` : ''}
+    ${actionsHtml}
+    <div style="font-size:0.60rem;color:var(--border);margin-top:6px;">Modèle: ${a.model || 'llama3'} · ${a.analyzed_at ? a.analyzed_at.slice(0,16) : ''}</div>
+  `;
+}
+
+async function loadCorrelation() {
+  if (!INC_IP) return;
+  const panel = document.getElementById('corr-panel');
+  if (!panel) return;
+  try {
+    // Count related activity
+    const [logsR, incR] = await Promise.all([
+      fetch('/api/logs?src_ip=' + encodeURIComponent(INC_IP) + '&size=100&date_from=now-24h').then(r => r.json()),
+      fetch('/api/incidents/stats').then(r => r.json())
+    ]);
+    const logCount = logsR.total || 0;
+    const logHits  = logsR.hits  || [];
+
+    // Count by type
+    const byType = {};
+    logHits.forEach(h => { byType[h.log_type || '?'] = (byType[h.log_type || '?'] || 0) + 1; });
+    const typeHtml = Object.entries(byType).map(([t,c]) =>
+      `<span style="background:var(--bg3);border:1px solid var(--border);border-radius:10px;padding:2px 8px;font-size:0.68rem;"><span class="type-mono" style="font-size:0.65rem;">${t}</span> <strong>${c}</strong></span>`
+    ).join(' ');
+
+    const sevCounts = {};
+    logHits.forEach(h => { sevCounts[h.severity || 'info'] = (sevCounts[h.severity || 'info'] || 0) + 1; });
+    const critCount = (sevCounts.critical || 0) + (sevCounts.high || 0);
+    const riskLevel = critCount >= 10 ? 'CRITIQUE' : critCount >= 3 ? 'ÉLEVÉ' : 'FAIBLE';
+    const riskColor = critCount >= 10 ? 'var(--red)' : critCount >= 3 ? 'var(--orange)' : 'var(--green)';
+
+    panel.innerHTML = `
+      <div class="row g-2">
+        <div class="col-md-3">
+          <div style="background:var(--bg3);border-radius:8px;padding:10px;text-align:center;">
+            <div style="font-size:1.4rem;font-weight:700;color:var(--blue);">${logCount.toLocaleString()}</div>
+            <div style="font-size:0.68rem;color:var(--muted);">Logs 24h depuis cette IP</div>
+          </div>
+        </div>
+        <div class="col-md-3">
+          <div style="background:var(--bg3);border-radius:8px;padding:10px;text-align:center;">
+            <div style="font-size:1.4rem;font-weight:700;color:${riskColor};">${riskLevel}</div>
+            <div style="font-size:0.68rem;color:var(--muted);">Niveau d'activité</div>
+          </div>
+        </div>
+        <div class="col-md-6">
+          <div style="background:var(--bg3);border-radius:8px;padding:10px;">
+            <div style="font-size:0.65rem;color:var(--muted);margin-bottom:5px;">Répartition par type</div>
+            <div style="display:flex;flex-wrap:wrap;gap:4px;">${typeHtml || '<span style="color:var(--muted);font-size:0.75rem;">Aucun log trouvé</span>'}</div>
+          </div>
+        </div>
+      </div>
+      <div style="margin-top:8px;padding:8px 12px;background:rgba(255,166,87,0.06);border-radius:6px;font-size:0.74rem;color:var(--muted);">
+        <i class="fas fa-info-circle me-1" style="color:var(--orange);"></i>
+        Corrélation basée sur l'IP <strong style="color:var(--text);font-family:monospace;">${INC_IP}</strong> —
+        ${logCount} entrées de log sur les dernières 24h ·
+        ${critCount} événements de sévérité haute/critique détectés.
+      </div>
+    `;
+  } catch(e) {
+    if (panel) panel.innerHTML = '<span style="color:var(--muted);font-size:0.78rem;">Corrélation indisponible.</span>';
+  }
+}
+
+loadAnalysis();
+loadCorrelation();
+
+async function generateReport(btn) {
+  const orig = btn.innerHTML;
+  btn.disabled = true;
+  btn.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>Génération…';
+  try {
+    const r = await fetch('/api/incidents/' + INC_ID + '/report', {method:'POST'});
+    const d = await r.json();
+    if (r.ok && d.report) {
+      btn.innerHTML = '<i class="fas fa-check me-1"></i>Rapport généré';
+      btn.style.color = 'var(--green)';
+      // Show report and add download button
+      let reportEl = document.getElementById('report-section');
+      if (!reportEl) {
+        reportEl = document.createElement('div');
+        reportEl.id = 'report-section';
+        reportEl.className = 'card-section mt-3';
+        reportEl.style.cssText = 'padding:18px 22px;';
+        document.querySelector('.container-fluid, main, [class*="content"]')?.appendChild(reportEl)
+          || document.body.appendChild(reportEl);
+      }
+      reportEl.innerHTML = `
+        <div class="d-flex justify-content-between align-items-center mb-2">
+          <div class="section-title mb-0"><i class="fas fa-file-alt me-2"></i>Rapport Post-Incident (phi3:mini)</div>
+          <a href="/api/incidents/${INC_ID}/report/pdf" class="btn-soc" style="font-size:0.78rem;padding:4px 12px;color:var(--orange);border-color:var(--orange);">
+            <i class="fas fa-file-pdf me-1"></i>Télécharger PDF
+          </a>
+        </div>
+        <pre style="white-space:pre-wrap;font-family:inherit;font-size:0.82rem;color:var(--text);background:var(--bg3);border-radius:8px;padding:14px;border:1px solid var(--border);max-height:400px;overflow-y:auto;">${d.report.replace(/</g,'&lt;')}</pre>`;
+      reportEl.scrollIntoView({behavior:'smooth'});
+    } else {
+      btn.innerHTML = orig; btn.disabled = false;
+      alert('Erreur: ' + (d.error || 'Génération échouée'));
+    }
+  } catch(e) {
+    btn.innerHTML = orig; btn.disabled = false;
+  }
+}
+
+async function applyMitigation() {
+  if (!confirm(`Bloquer l'IP ${INC_IP} via iptables DROP ?\n\nCette action est réversible (L3 uniquement).`)) return;
+  const btn = document.getElementById('mitigateBtn');
+  btn.disabled = true;
+  btn.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>Blocage…';
+  try {
+    const r = await fetch('/api/incidents/' + INC_ID + '/mitigate', {method:'POST'});
+    const d = await r.json();
+    if (d.status === 'ok') {
+      btn.innerHTML = '<i class="fas fa-ban me-1"></i>Bloqué ✓';
+      btn.style.color = 'var(--green)';
+    } else {
+      btn.innerHTML = '<i class="fas fa-ban me-1"></i>Mitiger IP';
+      btn.disabled = false;
+      alert('Erreur: ' + (d.error || 'inconnue'));
+    }
+  } catch(e) {
+    btn.innerHTML = '<i class="fas fa-ban me-1"></i>Mitiger IP';
+    btn.disabled = false;
+  }
+}
+</script>
+
+<!-- Modal Clôture incident -->
+<div id="modalClose" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.7);z-index:1000;align-items:center;justify-content:center;">
+  <div style="background:var(--bg2);border:1px solid var(--border);border-radius:12px;padding:28px;width:460px;max-width:95vw;">
+    <div class="d-flex justify-content-between align-items-center mb-3">
+      <h6 style="color:var(--green);margin:0;"><i class="fas fa-check-circle me-2"></i>Clôturer l'incident</h6>
+      <button onclick="document.getElementById('modalClose').style.display='none'"
+              style="background:none;border:none;color:var(--muted);font-size:1.2rem;cursor:pointer;">×</button>
+    </div>
+    <div style="font-size:0.8rem;color:var(--muted);margin-bottom:16px;">
+      Incident <strong style="color:var(--text);">{{ inc.get('incident_id', inc.id[:8]|upper) }}</strong> —
+      <span class="badge-sev sev-{{ sev }}" style="font-size:0.65rem;">{{ sev|upper }}</span>
+    </div>
+    <div class="mb-3">
+      <label style="font-size:0.75rem;color:var(--muted);">Verdict final *</label>
+      <select id="close-verdict" class="form-ctrl mt-1">
+        <option value="true_positive">True Positive — Menace réelle confirmée</option>
+        <option value="false_positive">False Positive — Fausse alerte</option>
+        <option value="benign">Bénin — Activité normale</option>
+      </select>
+    </div>
+    <div class="mb-3">
+      <label style="font-size:0.75rem;color:var(--muted);">Résolution *</label>
+      <textarea id="close-resolution" rows="3" class="form-ctrl mt-1"
+        placeholder="Décrivez les actions prises, la cause racine, et comment l'incident a été résolu…"></textarea>
+    </div>
+    <div class="mb-3">
+      <label style="font-size:0.75rem;color:var(--muted);">Lessons Learned</label>
+      <textarea id="close-lessons" rows="2" class="form-ctrl mt-1"
+        placeholder="Ce qui a bien fonctionné, ce qui peut être amélioré…"></textarea>
+    </div>
+    <div class="d-flex gap-2 justify-content-end">
+      <button onclick="document.getElementById('modalClose').style.display='none'" class="btn-soc">Annuler</button>
+      <button onclick="closeIncident()" class="btn-soc" style="border-color:rgba(63,185,80,0.5);color:var(--green);">
+        <i class="fas fa-check me-1"></i>Confirmer la clôture
+      </button>
+    </div>
+  </div>
+</div>
+
+<script>
+async function closeIncident() {
+  const verdict    = document.getElementById('close-verdict').value;
+  const resolution = document.getElementById('close-resolution').value.trim();
+  const lessons    = document.getElementById('close-lessons').value.trim();
+  if (!resolution) { alert('Veuillez renseigner la résolution.'); return; }
+
+  const r = await fetch('/incidents/{{ inc.id }}/close', {
+    method: 'POST',
+    headers: {'Content-Type':'application/json'},
+    body: JSON.stringify({verdict, resolution, lessons_learned: lessons})
+  });
+  const d = await r.json();
+  if (r.ok && d.status === 'ok') {
+    document.getElementById('modalClose').style.display = 'none';
+    location.reload();
+  } else {
+    alert(d.error || 'Erreur lors de la clôture.');
+  }
+}
+</script>
+
+{% endblock %}

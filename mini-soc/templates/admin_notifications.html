@@ -1,0 +1,357 @@
+{% extends "base.html" %}
+{% block title %}Notifications — Config{% endblock %}
+{% block content %}
+
+<div class="d-flex align-items-center justify-content-between mb-3">
+  <div>
+    <div style="font-size:1.1rem; font-weight:600;">
+      <i class="fas fa-bell me-2" style="color:var(--orange);"></i>Configuration des notifications
+    </div>
+    <div style="font-size:0.78rem; color:var(--muted);">Alertes Email et Slack/Discord pour les parties prenantes</div>
+  </div>
+  <div class="d-flex gap-2">
+    <button onclick="testNotifs()" class="btn-soc" style="border-color:var(--blue); color:var(--blue); font-size:0.8rem;" id="testBtn">
+      <i class="fas fa-paper-plane me-1"></i>Tester les notifications
+    </button>
+    <button onclick="saveConfig()" class="btn-soc btn-soc-primary" style="font-size:0.8rem;" id="saveBtn">
+      <i class="fas fa-save me-1"></i>Sauvegarder
+    </button>
+  </div>
+</div>
+
+<div id="alertBox" style="display:none; margin-bottom:16px;"></div>
+
+<div class="row g-3">
+
+  <!-- Global settings -->
+  <div class="col-12">
+    <div class="card-section">
+      <div class="section-title"><i class="fas fa-sliders-h me-1"></i>Paramètres généraux</div>
+      <div class="row g-3">
+        <div class="col-md-4">
+          <label style="font-size:0.78rem; color:var(--muted); display:block; margin-bottom:6px;">Notifications actives</label>
+          <label class="d-flex align-items-center gap-2" style="cursor:pointer;">
+            <input type="checkbox" id="cfg_enabled" style="width:16px;height:16px;">
+            <span style="font-size:0.82rem;">Activer les notifications</span>
+          </label>
+        </div>
+        <div class="col-md-8">
+          <label style="font-size:0.78rem; color:var(--muted); display:block; margin-bottom:6px;">Niveaux de sévérité déclencheurs</label>
+          <div class="d-flex gap-3">
+            {% for sev, color in [('critical','var(--red)'),('high','var(--orange)'),('medium','var(--yellow)'),('low','var(--green)')] %}
+            <label class="d-flex align-items-center gap-1" style="cursor:pointer;">
+              <input type="checkbox" id="sev_{{ sev }}" style="width:14px;height:14px;">
+              <span style="font-size:0.78rem; color:{{ color }};">{{ sev.upper() }}</span>
+            </label>
+            {% endfor %}
+          </div>
+        </div>
+        <div class="col-12">
+          <div class="d-flex gap-4">
+            <label class="d-flex align-items-center gap-2" style="cursor:pointer;">
+              <input type="checkbox" id="cfg_on_assign" style="width:14px;height:14px;">
+              <span style="font-size:0.78rem;">Notifier à l'assignation</span>
+            </label>
+            <label class="d-flex align-items-center gap-2" style="cursor:pointer;">
+              <input type="checkbox" id="cfg_on_escalate" style="width:14px;height:14px;">
+              <span style="font-size:0.78rem;">Notifier à l'escalade</span>
+            </label>
+            <label class="d-flex align-items-center gap-2" style="cursor:pointer;">
+              <input type="checkbox" id="cfg_on_sla" style="width:14px;height:14px;">
+              <span style="font-size:0.78rem;">Notifier si SLA dépassé</span>
+            </label>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Email config -->
+  <div class="col-lg-6">
+    <div class="card-section" style="height:100%;">
+      <div class="section-title" style="color:var(--orange);">
+        <i class="fas fa-envelope me-1"></i>Email (SMTP)
+        <span id="email-status-badge" style="margin-left:8px; font-size:0.68rem; padding:2px 8px; border-radius:10px; background:var(--bg3); color:var(--muted);">—</span>
+      </div>
+      <div class="d-flex align-items-center gap-2 mb-3">
+        <input type="checkbox" id="email_enabled" style="width:15px;height:15px;" onchange="toggleEmailFields()">
+        <label style="font-size:0.82rem; cursor:pointer;" for="email_enabled">Activer les notifications email</label>
+      </div>
+      <div id="emailFields">
+        <div class="row g-2">
+          <div class="col-6">
+            <label class="field-label">Serveur SMTP</label>
+            <input id="smtp_host" type="text" placeholder="smtp.gmail.com" class="soc-input">
+          </div>
+          <div class="col-3">
+            <label class="field-label">Port</label>
+            <input id="smtp_port" type="number" placeholder="587" class="soc-input">
+          </div>
+          <div class="col-12">
+            <label class="field-label">Email expéditeur (compte SMTP)</label>
+            <input id="smtp_user" type="email" placeholder="soc-alertes@gmail.com" class="soc-input">
+          </div>
+          <div class="col-12">
+            <label class="field-label">Mot de passe SMTP (App Password pour Gmail)</label>
+            <div style="position:relative;">
+              <input id="smtp_pass" type="password" placeholder="••••••••••••••••" class="soc-input" style="padding-right:36px;">
+              <button type="button" onclick="togglePass('smtp_pass', this)" style="position:absolute;right:8px;top:50%;transform:translateY(-50%);background:none;border:none;color:var(--muted);cursor:pointer;font-size:0.75rem;">
+                <i class="fas fa-eye"></i>
+              </button>
+            </div>
+            <div style="font-size:0.7rem; color:var(--muted); margin-top:3px;">
+              Pour Gmail : activer 2FA + générer un <a href="https://myaccount.google.com/apppasswords" target="_blank" style="color:var(--blue);">App Password</a>
+            </div>
+          </div>
+          <div class="col-12">
+            <label class="field-label">Adresse expéditrice affichée</label>
+            <input id="from_addr" type="email" placeholder="Mini-SOC &lt;soc@example.com&gt;" class="soc-input">
+          </div>
+          <div class="col-12">
+            <label class="field-label">Destinataires (un par ligne)</label>
+            <textarea id="to_addrs" rows="3" placeholder="responsable@company.com&#10;soc-team@company.com" class="soc-input" style="resize:vertical;"></textarea>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Webhook config -->
+  <div class="col-lg-6">
+    <div class="card-section" style="height:100%;">
+      <div class="section-title" style="color:var(--purple);">
+        <i class="fas fa-plug me-1"></i>Webhook Slack / Discord
+        <span id="webhook-status-badge" style="margin-left:8px; font-size:0.68rem; padding:2px 8px; border-radius:10px; background:var(--bg3); color:var(--muted);">—</span>
+      </div>
+      <div class="d-flex align-items-center gap-2 mb-3">
+        <input type="checkbox" id="webhook_enabled" style="width:15px;height:15px;" onchange="toggleWebhookFields()">
+        <label style="font-size:0.82rem; cursor:pointer;" for="webhook_enabled">Activer les notifications webhook</label>
+      </div>
+      <div id="webhookFields">
+        <div class="row g-2">
+          <div class="col-12">
+            <label class="field-label">Type de webhook</label>
+            <div class="d-flex gap-3">
+              <label class="d-flex align-items-center gap-2" style="cursor:pointer;">
+                <input type="radio" name="webhook_type" id="wtype_slack" value="slack" checked>
+                <i class="fab fa-slack" style="color:#4A154B;font-size:1.1rem;"></i>
+                <span style="font-size:0.82rem;">Slack</span>
+              </label>
+              <label class="d-flex align-items-center gap-2" style="cursor:pointer;">
+                <input type="radio" name="webhook_type" id="wtype_discord" value="discord">
+                <i class="fab fa-discord" style="color:#5865F2;font-size:1.1rem;"></i>
+                <span style="font-size:0.82rem;">Discord</span>
+              </label>
+            </div>
+          </div>
+          <div class="col-12">
+            <label class="field-label">URL du webhook</label>
+            <input id="webhook_url" type="text" placeholder="https://hooks.slack.com/services/..." class="soc-input">
+          </div>
+          <!-- Guide Slack -->
+          <div class="col-12">
+            <div style="background:var(--bg3);border-radius:8px;padding:12px;font-size:0.75rem;color:var(--muted);">
+              <div style="font-weight:600; color:var(--text); margin-bottom:6px;"><i class="fas fa-info-circle me-1" style="color:var(--blue);"></i>Comment obtenir l'URL</div>
+              <div style="margin-bottom:4px;"><strong style="color:#4A154B;">Slack :</strong> api.slack.com/apps → Incoming Webhooks → Add New Webhook</div>
+              <div><strong style="color:#5865F2;">Discord :</strong> Channel Settings → Integrations → Webhooks → New Webhook</div>
+            </div>
+          </div>
+          <!-- Preview -->
+          <div class="col-12" style="margin-top:8px;">
+            <div style="font-size:0.72rem; color:var(--muted); margin-bottom:8px; text-transform:uppercase; letter-spacing:1px;">Aperçu du message</div>
+            <div style="background:var(--bg3);border-radius:8px;padding:12px;border-left:4px solid var(--orange);">
+              <div style="font-size:0.8rem; font-weight:700; margin-bottom:4px;">🟠 Nouvel incident détecté — INC-2026-0042</div>
+              <div style="font-size:0.75rem; color:var(--muted); margin-bottom:6px;">SSH Brute Force — 192.168.122.231</div>
+              <div style="display:flex;gap:16px;flex-wrap:wrap;">
+                <span style="font-size:0.7rem;"><strong>Sévérité</strong> HIGH</span>
+                <span style="font-size:0.7rem;"><strong>Score IA</strong> 0.847</span>
+                <span style="font-size:0.7rem;"><strong>Votes</strong> 3/4</span>
+                <span style="font-size:0.7rem;"><strong>llama3</strong> true_positive</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Notification log -->
+  <div class="col-12">
+    <div class="card-section p-0">
+      <div style="padding:12px 16px; border-bottom:1px solid var(--border);">
+        <div style="font-size:0.85rem; font-weight:600; color:var(--text);">
+          <i class="fas fa-history me-2" style="color:var(--muted);"></i>Dernières notifications envoyées
+        </div>
+      </div>
+      <div id="notifLog" style="padding:16px; font-size:0.8rem; color:var(--muted); min-height:80px;">Chargement…</div>
+    </div>
+  </div>
+
+</div>
+
+<style>
+.soc-input {
+  width:100%; background:var(--bg3); border:1px solid var(--border);
+  color:var(--text); border-radius:6px; padding:7px 10px;
+  font-size:0.82rem; outline:none; transition:border-color .15s;
+}
+.soc-input:focus { border-color:var(--blue); }
+.field-label { font-size:0.72rem; color:var(--muted); display:block; margin-bottom:4px; }
+</style>
+
+<script>
+let config = {};
+
+async function loadConfig() {
+  config = await fetch('/api/admin/notifications/config').then(r => r.json());
+  applyConfigToForm(config);
+  updateBadges();
+  loadNotifLog();
+}
+
+function applyConfigToForm(c) {
+  document.getElementById('cfg_enabled').checked  = c.enabled !== false;
+  document.getElementById('cfg_on_assign').checked   = c.notify_on_assign !== false;
+  document.getElementById('cfg_on_escalate').checked = c.notify_on_escalate !== false;
+  document.getElementById('cfg_on_sla').checked      = c.notify_on_sla_breach !== false;
+
+  const sevs = c.notify_severities || ['critical','high'];
+  ['critical','high','medium','low'].forEach(s => {
+    document.getElementById(`sev_${s}`).checked = sevs.includes(s);
+  });
+
+  const e = c.email || {};
+  document.getElementById('email_enabled').checked = e.enabled === true;
+  document.getElementById('smtp_host').value = e.smtp_host || 'smtp.gmail.com';
+  document.getElementById('smtp_port').value = e.smtp_port || 587;
+  document.getElementById('smtp_user').value = e.smtp_user || '';
+  document.getElementById('smtp_pass').value = e.smtp_pass || '';
+  document.getElementById('from_addr').value = e.from_addr || '';
+  document.getElementById('to_addrs').value  = (e.to_addrs || []).join('\n');
+
+  const w = c.webhook || {};
+  document.getElementById('webhook_enabled').checked = w.enabled === true;
+  document.getElementById('webhook_url').value = w.url || '';
+  const wtype = w.type || 'slack';
+  document.querySelector(`input[name="webhook_type"][value="${wtype}"]`).checked = true;
+
+  toggleEmailFields();
+  toggleWebhookFields();
+}
+
+function toggleEmailFields() {
+  const en = document.getElementById('email_enabled').checked;
+  document.getElementById('emailFields').style.opacity  = en ? '1' : '0.4';
+  document.getElementById('emailFields').style.pointerEvents = en ? '' : 'none';
+}
+function toggleWebhookFields() {
+  const en = document.getElementById('webhook_enabled').checked;
+  document.getElementById('webhookFields').style.opacity  = en ? '1' : '0.4';
+  document.getElementById('webhookFields').style.pointerEvents = en ? '' : 'none';
+}
+
+function updateBadges() {
+  const e = config.email || {};
+  const w = config.webhook || {};
+  const eBadge = document.getElementById('email-status-badge');
+  const wBadge = document.getElementById('webhook-status-badge');
+  eBadge.textContent = e.enabled ? '● Actif' : '○ Inactif';
+  eBadge.style.color = e.enabled ? 'var(--green)' : 'var(--muted)';
+  wBadge.textContent = w.enabled ? '● Actif' : '○ Inactif';
+  wBadge.style.color = w.enabled ? 'var(--green)' : 'var(--muted)';
+}
+
+function readFormToConfig() {
+  return {
+    enabled: document.getElementById('cfg_enabled').checked,
+    notify_on_assign:    document.getElementById('cfg_on_assign').checked,
+    notify_on_escalate:  document.getElementById('cfg_on_escalate').checked,
+    notify_on_sla_breach: document.getElementById('cfg_on_sla').checked,
+    notify_severities: ['critical','high','medium','low'].filter(s => document.getElementById(`sev_${s}`).checked),
+    email: {
+      enabled:   document.getElementById('email_enabled').checked,
+      smtp_host: document.getElementById('smtp_host').value.trim(),
+      smtp_port: parseInt(document.getElementById('smtp_port').value) || 587,
+      smtp_user: document.getElementById('smtp_user').value.trim(),
+      smtp_pass: document.getElementById('smtp_pass').value,
+      from_addr: document.getElementById('from_addr').value.trim(),
+      to_addrs:  document.getElementById('to_addrs').value.split('\n').map(s=>s.trim()).filter(Boolean),
+    },
+    webhook: {
+      enabled: document.getElementById('webhook_enabled').checked,
+      url:     document.getElementById('webhook_url').value.trim(),
+      type:    document.querySelector('input[name="webhook_type"]:checked')?.value || 'slack',
+    },
+  };
+}
+
+async function saveConfig() {
+  const btn = document.getElementById('saveBtn');
+  btn.disabled = true; btn.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>Sauvegarde…';
+  const cfg = readFormToConfig();
+  const r = await fetch('/api/admin/notifications/config', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(cfg)}).then(r=>r.json());
+  btn.disabled = false; btn.innerHTML = '<i class="fas fa-save me-1"></i>Sauvegarder';
+  if (r.ok) {
+    config = cfg;
+    updateBadges();
+    showAlert('success', 'Configuration sauvegardée.');
+  } else {
+    showAlert('danger', r.error || 'Erreur lors de la sauvegarde.');
+  }
+}
+
+async function testNotifs() {
+  const btn = document.getElementById('testBtn');
+  btn.disabled = true; btn.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>Envoi…';
+  const r = await fetch('/api/admin/notifications/test', {method:'POST'}).then(r=>r.json());
+  btn.disabled = false; btn.innerHTML = '<i class="fas fa-paper-plane me-1"></i>Tester les notifications';
+  const lines = [];
+  if (r.email   === true)  lines.push('✅ Email envoyé');
+  if (r.email   === false) lines.push('❌ Email échoué (vérifier SMTP)');
+  if (r.webhook === true)  lines.push('✅ Webhook envoyé');
+  if (r.webhook === false) lines.push('❌ Webhook échoué (vérifier URL)');
+  if (!lines.length) lines.push('ℹ️ Aucun canal actif — activer Email et/ou Webhook d\'abord');
+  showAlert(lines.some(l=>l.startsWith('✅')) ? 'success' : 'warning', lines.join(' · '));
+  loadNotifLog();
+}
+
+async function loadNotifLog() {
+  const r = await fetch('/api/admin/notifications/log').then(r=>r.json()).catch(()=>({entries:[]}));
+  const el = document.getElementById('notifLog');
+  if (!r.entries || !r.entries.length) {
+    el.innerHTML = '<span style="color:var(--muted);">Aucune notification envoyée pour l\'instant.</span>';
+    return;
+  }
+  el.innerHTML = r.entries.slice(0,15).map(e => {
+    const ts = (e.ts||'').substring(0,16).replace('T',' ');
+    const ok = e.status === 'ok';
+    const channels = Object.entries(e.channels||{}).map(([c,s]) =>
+      `<span style="margin-left:6px;font-size:0.7rem;color:${s?'var(--green)':'var(--red)'};">${c}: ${s?'✓':'✗'}</span>`
+    ).join('');
+    return `<div style="padding:6px 0;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:10px;">
+      <span style="font-family:monospace;font-size:0.7rem;color:var(--muted);min-width:110px;">${ts}</span>
+      <span style="font-size:0.72rem;color:var(--blue);">${e.event||'—'}</span>
+      <span style="font-size:0.72rem;color:var(--muted);flex:1;">${e.incident_id||''}</span>
+      ${channels}
+    </div>`;
+  }).join('');
+}
+
+function showAlert(type, msg) {
+  const colors = {success:'var(--green)',danger:'var(--red)',warning:'var(--orange)',info:'var(--blue)'};
+  const box = document.getElementById('alertBox');
+  box.style.display = 'block';
+  box.innerHTML = `<div style="padding:10px 16px;border-radius:8px;border:1px solid ${colors[type]||'var(--border)'};background:${colors[type]||'var(--border)'}22;color:${colors[type]||'var(--text)'};font-size:0.82rem;">${msg}</div>`;
+  setTimeout(()=>{box.style.display='none';}, 5000);
+}
+
+function togglePass(id, btn) {
+  const inp = document.getElementById(id);
+  if (inp.type === 'password') { inp.type = 'text'; btn.innerHTML = '<i class="fas fa-eye-slash"></i>'; }
+  else { inp.type = 'password'; btn.innerHTML = '<i class="fas fa-eye"></i>'; }
+}
+
+loadConfig();
+</script>
+
+{% endblock %}

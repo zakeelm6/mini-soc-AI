@@ -1,0 +1,264 @@
+{% extends "base.html" %}
+{% block title %}Pipeline SOC{% endblock %}
+{% block content %}
+
+<div class="d-flex justify-content-between align-items-center mb-3">
+  <div>
+    <h5 style="margin:0;font-weight:700;"><i class="fas fa-project-diagram me-2" style="color:var(--purple);"></i>Pipeline SOC — Architecture & Services</h5>
+    <div style="font-size:0.78rem;color:var(--muted);">Vue temps réel de tous les composants · refresh 15s</div>
+  </div>
+  <div class="d-flex gap-2 align-items-center">
+    <span class="live-dot"></span>
+    <span id="status-time" style="font-size:0.78rem;color:var(--muted);">—</span>
+  </div>
+</div>
+
+<!-- Throughput en temps réel -->
+<div class="row g-2 mb-4" id="throughput-row">
+  <div class="col-6 col-md">
+    <div class="stat-card">
+      <div class="number" style="color:var(--blue);font-size:1.6rem;" id="tp-logs">—</div>
+      <div class="label">Logs / min</div>
+    </div>
+  </div>
+  <div class="col-6 col-md">
+    <div class="stat-card">
+      <div class="number" style="color:var(--purple);font-size:1.6rem;" id="tp-if">—</div>
+      <div class="label">IF alertes / min</div>
+    </div>
+  </div>
+  <div class="col-6 col-md">
+    <div class="stat-card">
+      <div class="number" style="color:var(--green);font-size:1.6rem;" id="tp-rf">—</div>
+      <div class="label">RF alertes / min</div>
+    </div>
+  </div>
+  <div class="col-6 col-md">
+    <div class="stat-card">
+      <div class="number" style="color:var(--orange);font-size:1.6rem;" id="tp-dl">—</div>
+      <div class="label">DL alertes / min</div>
+    </div>
+  </div>
+  <div class="col-6 col-md">
+    <div class="stat-card">
+      <div class="number" style="color:var(--red);font-size:1.6rem;" id="tp-inc">—</div>
+      <div class="label">Incidents 24h</div>
+    </div>
+  </div>
+</div>
+
+<!-- Pipeline visuel -->
+<div class="card-section mb-4">
+  <div class="section-title">Flux de données</div>
+
+  <div style="overflow-x:auto;">
+  <div style="display:flex;align-items:center;gap:0;min-width:900px;padding:10px 0;">
+
+    <!-- Étape 1: Sources -->
+    <div class="pipe-stage">
+      <div class="pipe-icon" style="background:rgba(88,166,255,0.15);border-color:var(--blue);">
+        <i class="fas fa-server" style="color:var(--blue);font-size:1.4rem;"></i>
+      </div>
+      <div class="pipe-name">VM Victime</div>
+      <div class="pipe-sub">SSH · Apache<br>Auth logs</div>
+      <div class="pipe-badge" style="color:var(--blue);" id="s-filebeat">
+        <span id="dot-filebeat" class="{% if services.filebeat.up %}live-dot{% else %}offline-dot{% endif %}"></span>
+        Filebeat
+      </div>
+    </div>
+
+    <div class="pipe-arrow">→</div>
+
+    <!-- Étape 2: Logstash -->
+    <div class="pipe-stage">
+      <div class="pipe-icon" style="background:rgba(255,166,87,0.15);border-color:var(--orange);" id="icon-logstash">
+        <i class="fas fa-filter" style="color:var(--orange);font-size:1.4rem;"></i>
+      </div>
+      <div class="pipe-name">Logstash</div>
+      <div class="pipe-sub">Parse · Enrichit<br>Filtre · Route</div>
+      <div class="pipe-badge" style="color:var(--orange);">
+        <span id="dot-logstash" class="{% if services.logstash.up %}live-dot{% else %}offline-dot{% endif %}"></span>
+        :5044
+      </div>
+    </div>
+
+    <div class="pipe-arrow">→</div>
+
+    <!-- Étape 3: Elasticsearch -->
+    <div class="pipe-stage">
+      <div class="pipe-icon" style="background:rgba(227,179,65,0.15);border-color:var(--yellow);">
+        <i class="fas fa-database" style="color:var(--yellow);font-size:1.4rem;"></i>
+      </div>
+      <div class="pipe-name">Elasticsearch</div>
+      <div class="pipe-sub">soc-logs-*<br>soc-incidents</div>
+      <div class="pipe-badge" style="color:var(--yellow);">
+        <span id="dot-elasticsearch" class="{% if services.elasticsearch.up %}live-dot{% else %}offline-dot{% endif %}"></span>
+        :9200
+      </div>
+    </div>
+
+    <div class="pipe-arrow">→</div>
+
+    <!-- Étape 4: IA Models -->
+    <div class="pipe-stage" style="min-width:160px;">
+      <div class="pipe-icon" style="background:rgba(210,168,255,0.15);border-color:var(--purple);">
+        <i class="fas fa-brain" style="color:var(--purple);font-size:1.4rem;"></i>
+      </div>
+      <div class="pipe-name">Modèles IA</div>
+      <div style="display:flex;flex-direction:column;gap:3px;margin:4px 0;">
+        <div style="font-size:0.68rem;display:flex;align-items:center;gap:4px;">
+          <span id="dot-ia_if" class="{% if services.ia_if.up %}live-dot{% else %}offline-dot{% endif %}"></span>
+          <span style="color:var(--blue);">Isolation Forest</span>
+        </div>
+        <div style="font-size:0.68rem;display:flex;align-items:center;gap:4px;">
+          <span id="dot-ia_rf" class="{% if services.ia_rf.up %}live-dot{% else %}offline-dot{% endif %}"></span>
+          <span style="color:var(--green);">Random Forest (F1=1.0)</span>
+        </div>
+        <div style="font-size:0.68rem;display:flex;align-items:center;gap:4px;">
+          <span id="dot-ia_dl" class="{% if services.ia_dl.up %}live-dot{% else %}offline-dot{% endif %}"></span>
+          <span style="color:var(--orange);">Autoencoder DL</span>
+        </div>
+        <div style="font-size:0.68rem;display:flex;align-items:center;gap:4px;">
+          <span id="dot-ia_rate" class="{% if services.ia_rate.up %}live-dot{% else %}offline-dot{% endif %}"></span>
+          <span style="color:var(--yellow);">Rate Detector</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="pipe-arrow">→</div>
+
+    <!-- Étape 5: Ensemble -->
+    <div class="pipe-stage">
+      <div class="pipe-icon" style="background:rgba(248,81,73,0.15);border-color:var(--red);">
+        <i class="fas fa-vote-yea" style="color:var(--red);font-size:1.4rem;"></i>
+      </div>
+      <div class="pipe-name">Ensemble</div>
+      <div class="pipe-sub">Vote ≥2/4<br>Score pondéré</div>
+      <div class="pipe-badge" style="color:var(--red);">
+        <span id="dot-ia_ensemble" class="{% if services.ia_ensemble.up %}live-dot{% else %}offline-dot{% endif %}"></span>
+        60s cycle
+      </div>
+    </div>
+
+    <div class="pipe-arrow">→</div>
+
+    <!-- Étape 6: Flask + LLM -->
+    <div class="pipe-stage">
+      <div class="pipe-icon" style="background:rgba(63,185,80,0.15);border-color:var(--green);">
+        <i class="fas fa-shield-alt" style="color:var(--green);font-size:1.4rem;"></i>
+      </div>
+      <div class="pipe-name">Flask SOC</div>
+      <div class="pipe-sub">Incidents<br>Dashboard</div>
+      <div class="pipe-badge" style="color:var(--green);">
+        <span id="dot-flask" class="{% if services.flask.up %}live-dot{% else %}offline-dot{% endif %}"></span>
+        :5000
+      </div>
+    </div>
+
+    <div class="pipe-arrow">→</div>
+
+    <!-- Étape 7: Ollama LLM -->
+    <div class="pipe-stage">
+      <div class="pipe-icon" style="background:rgba(88,166,255,0.15);border-color:var(--blue);">
+        <i class="fas fa-robot" style="color:var(--blue);font-size:1.4rem;"></i>
+      </div>
+      <div class="pipe-name">Ollama llama3</div>
+      <div class="pipe-sub">Analyse LLM<br>verdict + actions</div>
+      <div class="pipe-badge" style="color:var(--blue);">
+        <span id="dot-ollama" class="{% if services.ollama.up %}live-dot{% else %}offline-dot{% endif %}"></span>
+        :11434
+      </div>
+    </div>
+
+  </div>
+  </div>
+</div>
+
+<!-- Détails des services -->
+<div class="row g-3">
+  {% set service_info = [
+    ('filebeat',    'Filebeat',          'fas fa-file-alt',       'var(--blue)',   'Collecte les logs SSH (/var/log/auth.log) et Apache sur la VM victime. Envoie vers Logstash en temps réel via le protocole Beats.', '5044', 'VM Victime → Logstash'),
+    ('logstash',    'Logstash',          'fas fa-filter',         'var(--orange)', 'Parse les logs bruts, extrait src_ip/ssh_user/severity avec des filtres Grok. Enrichit avec GeoIP. Route vers Elasticsearch.', '5044', 'Filebeat → Elasticsearch'),
+    ('elasticsearch','Elasticsearch',    'fas fa-database',       'var(--yellow)', 'Stocke tous les logs dans soc-logs-*. Indexe les anomalies IA, incidents, CVEs. Requêtes en temps réel via API REST.', '9200', 'Central store'),
+    ('kibana',      'Kibana',            'fas fa-chart-bar',      'var(--muted)',  'Visualisation des logs bruts, dashboards Elasticsearch. Accès via Tailscale.', '5601', 'Elasticsearch → Browser'),
+    ('ia_if',       'Isolation Forest',  'fas fa-tree',           'var(--purple)', 'Détecteur non-supervisé. Apprend un comportement normal et détecte les anomalies. Features : is_failed, is_invalid_usr, has_src_ip, etc.', 'local', 'soc-logs-* → soc-anomalies'),
+    ('ia_rf',       'Random Forest',     'fas fa-check-double',   'var(--green)',  'Détecteur supervisé entraîné sur 8245 logs labellisés. F1=1.0 sur le dataset test. 100 arbres, profondeur 8.', 'local', 'soc-logs-* → soc-rf-anomalies'),
+    ('ia_dl',       'Autoencoder DL',    'fas fa-project-diagram','var(--orange)', 'Réseau de neurones autoencoder. Reconstruit les features normales, score élevé si reconstruction impossible (anomalie).', 'local', 'soc-logs-* → soc-dl-anomalies'),
+    ('ia_rate',     'Rate Detector',     'fas fa-tachometer-alt', 'var(--yellow)', 'Détecteur de volume brut. Compte les logs SSH par IP sur 5 minutes. ≥10 = medium, ≥30 = high.', 'local', 'soc-logs-* → alertes'),
+    ('ia_ensemble', 'Ensemble',          'fas fa-vote-yea',       'var(--red)',    'Combine IF×30% + RF×35% + DL×20% + Rate×15%. Alerte seulement si ≥2 modèles votent. Cycle 60s. Élimine les faux positifs isolés.', 'local', 'Tous modèles → soc-ensemble-anomalies'),
+    ('flask',       'Flask Dashboard',   'fas fa-shield-alt',     'var(--green)',  'API REST + interface web. Gestion des incidents, authentification L1/L2/L3, auto-assignation, analyse LLM.', '5000', 'Elasticsearch → Browser'),
+    ('ollama',      'Ollama (llama3)',    'fas fa-robot',          'var(--blue)',   'LLM local llama3 (4.7GB). Analyse chaque incident : verdict TP/FP/incertain, type attaque, confiance, preuves, actions recommandées.', '11434', 'Flask → Incidents'),
+  ] %}
+  {% for key, name, icon, color, desc, port, flow in service_info %}
+  <div class="col-md-6 col-lg-4">
+    <div class="card-section h-100" style="border-left:3px solid {{ color }}; padding:14px;">
+      <div class="d-flex align-items-center gap-2 mb-2">
+        <i class="{{ icon }}" style="color:{{ color }};width:18px;text-align:center;"></i>
+        <strong style="font-size:0.85rem;">{{ name }}</strong>
+        <span id="badge-{{ key }}" class="ms-auto" style="font-size:0.68rem;padding:2px 8px;border-radius:10px;
+          {% if services[key].up %}background:rgba(63,185,80,0.15);color:var(--green);border:1px solid var(--green);
+          {% else %}background:rgba(139,148,158,0.15);color:var(--muted);border:1px solid var(--border);{% endif %}">
+          {% if services[key].up %}UP{% else %}DOWN{% endif %}
+        </span>
+      </div>
+      <div style="font-size:0.75rem;color:var(--muted);margin-bottom:6px;">{{ desc }}</div>
+      <div style="font-size:0.7rem;display:flex;gap:12px;">
+        <span><i class="fas fa-plug me-1" style="color:{{ color }};"></i>{{ port }}</span>
+        <span style="color:var(--muted);">{{ flow }}</span>
+      </div>
+    </div>
+  </div>
+  {% endfor %}
+</div>
+
+<style>
+.pipe-stage {
+  display: flex; flex-direction: column; align-items: center; text-align: center;
+  min-width: 100px; padding: 8px;
+}
+.pipe-icon {
+  width: 56px; height: 56px; border-radius: 12px; border: 2px solid;
+  display: flex; align-items: center; justify-content: center; margin-bottom: 6px;
+}
+.pipe-name { font-size: 0.8rem; font-weight: 700; margin-bottom: 2px; }
+.pipe-sub  { font-size: 0.65rem; color: var(--muted); line-height: 1.3; margin-bottom: 4px; }
+.pipe-badge { font-size: 0.68rem; display: flex; align-items: center; gap: 4px; }
+.pipe-arrow { font-size: 1.5rem; color: var(--border); padding: 0 4px; flex-shrink: 0; margin-top: -20px; }
+</style>
+
+<script>
+async function refreshStatus() {
+  try {
+    const d = await fetch('/api/pipeline/status').then(r => r.json());
+    const S = d.services, T = d.throughput;
+
+    // Update dots and badges
+    for (const [k, up] of Object.entries(S)) {
+      const dot   = document.getElementById('dot-' + k);
+      const badge = document.getElementById('badge-' + k);
+      if (dot) {
+        dot.className = up ? 'live-dot' : 'offline-dot';
+      }
+      if (badge) {
+        badge.textContent = up ? 'UP' : 'DOWN';
+        badge.style.background = up ? 'rgba(63,185,80,0.15)' : 'rgba(139,148,158,0.15)';
+        badge.style.color      = up ? 'var(--green)' : 'var(--muted)';
+        badge.style.border     = up ? '1px solid var(--green)' : '1px solid var(--border)';
+      }
+    }
+
+    // Throughput
+    document.getElementById('tp-logs').textContent = T.logs_1min;
+    document.getElementById('tp-if').textContent   = T.if_alerts_1min;
+    document.getElementById('tp-rf').textContent   = T.rf_alerts_1min;
+    document.getElementById('tp-dl').textContent   = T.dl_alerts_1min;
+    document.getElementById('tp-inc').textContent  = T.incidents_today;
+
+    document.getElementById('status-time').textContent = 'Mis à jour ' + new Date().toLocaleTimeString();
+  } catch(e) {}
+}
+
+refreshStatus();
+setInterval(refreshStatus, 15000);
+</script>
+{% endblock %}

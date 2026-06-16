@@ -1,0 +1,37 @@
+{
+  "total_auto_labeled": 4,
+  "true_positives": 4,
+  "false_positives": 0,
+  "retrains_triggered": 1,
+  "last_run": "2026-05-14T16:03:35.570292+00:00",
+  "history": [
+    {
+      "ts": "2026-05-14T16:03:35.509331+00:00",
+      "incident_id": "F43A1FA1",
+      "src_ip": "10.0.0.100",
+      "verdict": "true_positive",
+      "confidence": 1.0
+    },
+    {
+      "ts": "2026-05-14T16:03:35.539687+00:00",
+      "incident_id": "7680B2B1",
+      "src_ip": "192.168.122.1",
+      "verdict": "true_positive",
+      "confidence": 1.0
+    },
+    {
+      "ts": "2026-05-14T16:03:35.550830+00:00",
+      "incident_id": "B714479D",
+      "src_ip": "192.168.122.231",
+      "verdict": "true_positive",
+      "confidence": 1.0
+    },
+    {
+      "ts": "2026-05-14T16:03:35.570331+00:00",
+      "incident_id": "E5D8FFF3",
+      "src_ip": "",
+      "verdict": "true_positive",
+      "confidence": 1.0
+    }
+  ]
+}

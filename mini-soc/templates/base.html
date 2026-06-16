@@ -1,0 +1,1200 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Mini-SOC — {% block title %}{% endblock %}</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+  <style>
+    :root {
+      --bg:     #111927;
+      --bg2:    #1A2332;
+      --bg3:    #1E2B3C;
+      --bg4:    #243244;
+      --border: #2A3F5F;
+      --border2:#334E6E;
+      --text:   #A4B1CD;
+      --text2:  #C8D6EC;
+      --muted:  #4B5875;
+      --green:  #9FEF00;
+      --green2: #7DC200;
+      --red:    #FF4757;
+      --orange: #FF6B35;
+      --blue:   #2E86DE;
+      --cyan:   #00D9FF;
+      --purple: #A78BFA;
+      --yellow: #FFD700;
+      --htb-green: #9FEF00;
+      --sidebar-w: 220px;
+    }
+    * { box-sizing: border-box; }
+
+    html {
+      height: 100%;
+      overflow: hidden;
+    }
+    body {
+      height: 100%;
+      overflow: hidden;
+      margin: 0 !important;
+      padding: 0 !important;
+      background: var(--bg);
+      color: var(--text);
+      font-family: 'Space Grotesk', 'Segoe UI', system-ui, sans-serif;
+      background-image:
+        radial-gradient(ellipse 80% 40% at 50% -10%, rgba(159,239,0,0.04) 0%, transparent 60%);
+    }
+
+    /* ── LAYOUT PRINCIPAL ─────────────────────────────────────────── */
+    .app-layout {
+      display: flex !important;
+      flex-direction: row !important;
+      width: 100vw !important;
+      height: 100vh !important;
+      max-height: 100vh !important;
+      overflow: hidden !important;
+    }
+
+    /* ── TOPBAR ───────────────────────────────────────────────────── */
+    .topbar {
+      display: flex;
+      align-items: center;
+      height: 48px;
+      flex-shrink: 0;
+      background: var(--bg2);
+      border-bottom: 1px solid var(--border);
+      padding: 0 18px;
+      gap: 0;
+      z-index: 200;
+    }
+    .topbar-brand {
+      display: flex; align-items: center; gap: 9px;
+      text-decoration: none; flex-shrink: 0; margin-right: 20px;
+    }
+    .topbar-divider {
+      width: 1px; height: 22px; background: var(--border);
+      margin: 0 14px; flex-shrink: 0;
+    }
+    .topbar-admin-links {
+      display: flex; align-items: center; gap: 2px; flex: 1;
+    }
+    .topbar-admin-link {
+      display: flex; align-items: center; gap: 6px;
+      padding: 5px 10px; border-radius: 6px; font-size: 0.76rem;
+      color: rgba(255,71,87,0.7); text-decoration: none; font-weight: 500;
+      transition: background 0.15s, color 0.15s;
+      white-space: nowrap;
+    }
+    .topbar-admin-link:hover { background: rgba(255,71,87,0.08); color: #FF4757; }
+    .topbar-admin-link.active { background: rgba(255,71,87,0.1); color: #FF4757; font-weight: 600; }
+    .topbar-admin-link i { font-size: 0.7rem; }
+    .topbar-user {
+      display: none; align-items: center; gap: 8px; margin-left: auto; flex-shrink: 0;
+    }
+    .topbar-user-name {
+      font-size: 0.76rem; color: var(--text2); font-weight: 500;
+      max-width: 110px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    }
+    .topbar-btn {
+      display: flex; align-items: center; gap: 5px;
+      background: var(--bg3); border: 1px solid var(--border);
+      border-radius: 5px; padding: 5px 9px; font-size: 0.7rem;
+      color: var(--muted); text-decoration: none; cursor: pointer;
+      transition: color 0.15s, border-color 0.15s;
+      white-space: nowrap;
+    }
+    .topbar-btn:hover { color: var(--cyan); border-color: var(--cyan); }
+    .topbar-btn.logout:hover { color: var(--red); border-color: var(--red); }
+
+    /* ── MAIN WRAPPER (topbar + contenu) ─────────────────────────── */
+    .main-wrapper {
+      flex: 1 1 0% !important;
+      min-width: 0 !important;
+      height: 100% !important;
+      display: flex !important;
+      flex-direction: column !important;
+      overflow: hidden !important;
+    }
+    .main-scroll {
+      flex: 1 1 0% !important;
+      overflow-y: auto !important;
+      overflow-x: hidden !important;
+    }
+
+    /* ── SIDEBAR (pipeline SOC uniquement) ───────────────────────── */
+    .sidebar {
+      width: var(--sidebar-w) !important;
+      min-width: var(--sidebar-w) !important;
+      max-width: var(--sidebar-w) !important;
+      flex-shrink: 0 !important;
+      height: 100% !important;
+      max-height: 100% !important;
+      background: #111927;
+      border-right: 1px solid var(--border);
+      display: flex !important;
+      flex-direction: column !important;
+      overflow: hidden !important;
+      z-index: 100;
+    }
+    /* Brand */
+    .sidebar-brand {
+      display: flex; align-items: center; gap: 10px;
+      padding: 16px 16px 14px;
+      border-bottom: 1px solid var(--border);
+      text-decoration: none;
+      flex-shrink: 0;
+    }
+    .brand-shield {
+      width: 30px; height: 30px; flex-shrink: 0;
+      background: rgba(159,239,0,0.08);
+      border: 1px solid rgba(159,239,0,0.25);
+      border-radius: 8px;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 0.82rem;
+      box-shadow: 0 0 12px rgba(159,239,0,0.1);
+    }
+    .brand-text {
+      font-family: 'JetBrains Mono', monospace;
+      font-weight: 700;
+      font-size: 0.88rem;
+      letter-spacing: 1px;
+    }
+    .brand-prefix { color: var(--muted); font-size: 0.75rem; }
+    .brand-name   { color: var(--green); }
+
+    /* Nav scroll area */
+    .sidebar-nav {
+      flex: 1;
+      min-height: 0;       /* critical for flex overflow-y to work */
+      padding: 8px 0;
+      overflow-y: auto;
+      overflow-x: hidden;
+    }
+    .sidebar-nav::-webkit-scrollbar { width: 3px; }
+    .sidebar-nav::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 2px; }
+
+    /* Section label */
+    .nav-section-label {
+      font-size: 0.58rem; text-transform: uppercase; letter-spacing: 2px;
+      color: var(--muted); padding: 10px 16px 4px;
+      font-family: 'JetBrains Mono', monospace; font-weight: 600;
+    }
+
+    /* Nav link */
+    .nav-link {
+      display: flex; align-items: center; gap: 10px;
+      padding: 9px 16px;
+      color: var(--muted) !important;
+      text-decoration: none;
+      font-size: 0.8rem; font-weight: 500;
+      border-left: 2px solid transparent;
+      transition: color 0.15s, background 0.15s, border-color 0.15s;
+      white-space: nowrap;
+      position: relative;
+    }
+    .nav-link:hover { color: var(--text2) !important; background: rgba(255,255,255,0.03); }
+    .nav-link.active {
+      color: var(--green) !important;
+      border-left-color: var(--green);
+      background: rgba(159,239,0,0.05);
+    }
+    .nav-link i { font-size: 0.75rem; width: 16px; text-align: center; flex-shrink: 0; }
+
+    /* Incidents badge */
+    .inc-badge-wrapper { position: relative; display: block; }
+    .inc-dot {
+      display: none;
+      position: absolute; top: 6px; left: 28px;
+      background: var(--red); color: #fff;
+      font-size: 0.5rem; font-weight: 700;
+      border-radius: 4px; min-width: 15px; height: 15px;
+      line-height: 15px; text-align: center; padding: 0 3px;
+      border: 2px solid var(--bg);
+      box-shadow: 0 0 6px rgba(255,71,87,0.5);
+    }
+
+    /* Dropdown group (accordion style) */
+    .nav-group { }
+    .nav-group-btn {
+      display: flex; align-items: center; gap: 10px;
+      padding: 9px 16px;
+      width: 100%;
+      color: var(--muted);
+      font-size: 0.8rem; font-weight: 500;
+      border: none; background: none; cursor: pointer;
+      border-left: 2px solid transparent;
+      transition: color 0.15s, background 0.15s;
+      white-space: nowrap;
+      font-family: 'Space Grotesk', sans-serif;
+    }
+    .nav-group-btn:hover { color: var(--text2); background: rgba(255,255,255,0.03); }
+    .nav-group-btn.open  { color: var(--text2); background: rgba(255,255,255,0.03); }
+    .nav-group-btn i.main-icon { font-size: 0.75rem; width: 16px; text-align: center; flex-shrink: 0; }
+    .nav-group-btn .chevron {
+      margin-left: auto; font-size: 0.5rem; opacity: 0.4;
+      transition: transform 0.2s;
+    }
+    .nav-group.open .chevron { transform: rotate(90deg); opacity: 0.7; }
+
+    /* Dropdown sub-items */
+    .nav-dropdown {
+      display: none;
+      background: rgba(0,0,0,0.15);
+      border-left: 2px solid var(--border);
+      margin: 2px 0 2px 16px;
+      border-radius: 0 0 4px 0;
+      padding: 2px 0;
+    }
+    .nav-group.open .nav-dropdown { display: block; }
+    .nav-dropdown a {
+      display: flex; align-items: center; gap: 10px;
+      padding: 7px 12px;
+      font-size: 0.77rem; font-weight: 500;
+      color: var(--muted); text-decoration: none;
+      transition: color 0.1s, background 0.1s;
+    }
+    .nav-dropdown a:hover { color: var(--text2); background: rgba(255,255,255,0.03); }
+    .nav-dropdown a.active { color: var(--green); }
+    .nav-dropdown a i { font-size: 0.72rem; width: 14px; text-align: center; flex-shrink: 0; }
+    .nav-divider { height: 1px; background: var(--border); margin: 4px 8px; }
+
+    /* Sidebar bottom */
+    .sidebar-bottom {
+      flex-shrink: 0;
+      border-top: 1px solid var(--border);
+      padding: 10px 12px;
+      display: flex; flex-direction: column; gap: 8px;
+    }
+
+    /* Live pulse */
+    .live-pulse {
+      display: flex; align-items: center; gap: 6px;
+      font-size: 0.68rem; color: var(--muted);
+      font-family: 'JetBrains Mono', monospace;
+      padding: 2px 4px;
+    }
+    .live-dot {
+      width: 7px; height: 7px; background: var(--green); border-radius: 50%;
+      display: inline-block; animation: pulse 1.5s infinite; flex-shrink: 0;
+      box-shadow: 0 0 6px var(--green);
+    }
+    @keyframes pulse {
+      0%,100%{opacity:1;box-shadow:0 0 6px var(--green);}
+      50%{opacity:0.4;box-shadow:0 0 2px var(--green);}
+    }
+
+    /* Shift indicator */
+    #shift-indicator {
+      display: none; align-items: center; gap: 5px;
+      background: var(--bg3); border: 1px solid var(--border);
+      border-radius: 6px; padding: 5px 8px;
+      font-size: 0.7rem; cursor: pointer;
+      transition: border-color 0.15s;
+    }
+    #shift-indicator:hover { border-color: var(--border2); }
+
+    /* User pill */
+    .user-pill {
+      display: flex; align-items: center; gap: 8px;
+      background: var(--bg3); border: 1px solid var(--border);
+      border-radius: 6px; padding: 6px 10px; cursor: pointer;
+      transition: border-color 0.15s, box-shadow 0.15s;
+    }
+    .user-pill:hover { border-color: var(--green); box-shadow: 0 0 8px rgba(159,239,0,0.1); }
+    .user-level-badge {
+      font-size: 0.6rem; font-weight: 700; padding: 2px 6px; border-radius: 4px;
+      background: rgba(159,239,0,0.12); color: var(--green);
+      letter-spacing: 0.5px; font-family: 'JetBrains Mono', monospace;
+      border: 1px solid rgba(159,239,0,0.25); flex-shrink: 0;
+    }
+    .user-name-text { font-size: 0.76rem; color: var(--text2); font-weight: 500; flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .logout-icon { color: var(--muted); font-size: 0.75rem; flex-shrink: 0; transition: color 0.15s; }
+    .logout-icon:hover { color: var(--red); }
+
+    /* Nav link dans zone admin */
+    .nav-link.admin-link {
+      color: rgba(255,71,87,0.65) !important;
+    }
+    .nav-link.admin-link:hover {
+      color: #FF4757 !important;
+      background: rgba(255,71,87,0.06);
+    }
+    .nav-link.admin-link.active-admin {
+      color: #FF4757 !important;
+      border-left-color: #FF4757;
+      background: rgba(255,71,87,0.06);
+    }
+
+    /* Admin inline btn in sidebar bottom */
+    .admin-sidebar-btn {
+      display: none;
+      align-items: center; gap: 10px;
+      padding: 8px 10px;
+      background: rgba(255,71,87,0.06);
+      border: 1px solid rgba(255,71,87,0.2);
+      border-radius: 6px; cursor: pointer;
+      font-size: 0.77rem; font-weight: 600;
+      color: var(--red); text-decoration: none;
+      transition: background 0.15s, border-color 0.15s;
+    }
+    .admin-sidebar-btn:hover { background: rgba(255,71,87,0.1); border-color: rgba(255,71,87,0.4); color: var(--red); }
+
+    /* Admin dropdown inside sidebar bottom */
+    #ng-admin-bottom {
+      display: none;
+    }
+    #ng-admin-bottom.show { display: block; }
+    .admin-dropdown-inner {
+      background: rgba(255,71,87,0.04);
+      border: 1px solid rgba(255,71,87,0.15);
+      border-radius: 6px; padding: 4px 0; margin-top: 4px;
+    }
+    .admin-dropdown-inner a {
+      display: flex; align-items: center; gap: 8px;
+      padding: 7px 12px; font-size: 0.77rem; font-weight: 500;
+      color: var(--text); text-decoration: none;
+      transition: background 0.1s, color 0.1s;
+    }
+    .admin-dropdown-inner a:hover { background: rgba(255,71,87,0.07); color: var(--text2); }
+    .admin-dropdown-inner a.active { color: var(--red); }
+    .admin-dropdown-inner a i { width: 14px; text-align: center; font-size: 0.72rem; flex-shrink: 0; }
+
+    /* ── LAYOUT ──────────────────────────────────────────────────── */
+    .page-content { padding: 20px 24px; position: relative; z-index: 1; }
+
+    /* ── CARDS ───────────────────────────────────────────────────── */
+    .card-section {
+      background: var(--bg2); border: 1px solid var(--border);
+      border-radius: 8px; padding: 20px; margin-bottom: 20px;
+      transition: border-color 0.2s;
+    }
+    .card-section:hover { border-color: var(--border2); }
+    .section-title {
+      font-size: 0.68rem; text-transform: uppercase; letter-spacing: 2px;
+      color: var(--green); margin-bottom: 14px;
+      border-bottom: 1px solid var(--border); padding-bottom: 6px;
+      font-family: 'JetBrains Mono', monospace; font-weight: 600;
+    }
+    .stat-card {
+      background: var(--bg2); border: 1px solid var(--border);
+      border-radius: 8px; padding: 18px; text-align: center;
+      transition: border-color 0.15s, box-shadow 0.15s;
+    }
+    .stat-card:hover { border-color: var(--green); box-shadow: 0 0 16px rgba(159,239,0,0.06); }
+    .stat-card .number {
+      font-size: 2.2rem; font-weight: 700;
+      font-family: 'JetBrains Mono', monospace;
+    }
+    .stat-card .label { font-size: 0.68rem; text-transform: uppercase; letter-spacing: 1.5px; color: var(--muted); margin-top: 4px; }
+
+    /* ── TABLE ───────────────────────────────────────────────────── */
+    .soc-table { background: var(--bg2); border-collapse: separate; border-spacing: 0; }
+    .soc-table th {
+      background: var(--bg3); color: var(--muted); font-size: 0.67rem;
+      text-transform: uppercase; letter-spacing: 1.5px; border-color: var(--border);
+      padding: 10px 12px; font-weight: 600; font-family: 'JetBrains Mono', monospace;
+    }
+    .soc-table td { border-color: var(--border); font-size: 0.81rem; vertical-align: middle; padding: 10px 12px; }
+    .soc-table tr:hover td { background: var(--bg3); }
+
+    /* ── BADGES ──────────────────────────────────────────────────── */
+    .badge-sev { font-size: 0.65rem; padding: 2px 8px; border-radius: 4px; font-weight: 700; display: inline-flex; align-items: center; gap: 4px; font-family: 'JetBrains Mono', monospace; letter-spacing: 0.3px; }
+    .sev-critical { background: rgba(255,71,87,0.1);   color: #FF4757; border: 1px solid rgba(255,71,87,0.35); }
+    .sev-high     { background: rgba(255,107,53,0.1);  color: #FF6B35; border: 1px solid rgba(255,107,53,0.35); }
+    .sev-medium   { background: rgba(255,215,0,0.1);   color: #FFD700; border: 1px solid rgba(255,215,0,0.35); }
+    .sev-low      { background: rgba(159,239,0,0.08);  color: #9FEF00; border: 1px solid rgba(159,239,0,0.3); }
+    .sev-info     { background: rgba(0,217,255,0.08);  color: #00D9FF; border: 1px solid rgba(0,217,255,0.3); }
+
+    /* ── MISC ────────────────────────────────────────────────────── */
+    .type-mono { font-family: 'JetBrains Mono', monospace; font-size: 0.75rem; background: var(--bg3); color: var(--cyan); border-radius: 4px; padding: 2px 7px; border: 1px solid var(--border); }
+    .btn-soc {
+      background: var(--bg3); border: 1px solid var(--border); color: var(--text);
+      border-radius: 6px; font-size: 0.8rem; padding: 7px 14px;
+      text-decoration: none; display: inline-flex; align-items: center; gap: 8px;
+      transition: border-color 0.15s, color 0.15s, box-shadow 0.15s; cursor: pointer;
+      font-weight: 500;
+    }
+    .btn-soc:hover { border-color: var(--green); color: var(--green); box-shadow: 0 0 8px rgba(159,239,0,0.1); }
+    .btn-soc-primary { border-color: rgba(159,239,0,0.5); color: var(--green); }
+    .btn-soc-primary:hover { border-color: var(--green); box-shadow: 0 0 12px rgba(159,239,0,0.15); }
+    .btn-soc-danger  { border-color: rgba(255,71,87,0.5); color: var(--red); }
+    .btn-soc-danger:hover  { border-color: var(--red); box-shadow: 0 0 8px rgba(255,71,87,0.15); }
+    .btn-soc-success { border-color: rgba(159,239,0,0.5); color: var(--green); }
+    .empty-state { text-align: center; padding: 50px; color: var(--muted); font-family: 'JetBrains Mono', monospace; }
+    .empty-state::before { content: '> '; color: var(--green); }
+    code.msg { font-size: 0.75rem; color: var(--cyan); background: var(--bg3); padding: 2px 6px; border-radius: 4px; word-break: break-all; font-family: 'JetBrains Mono', monospace; }
+
+    /* Scrollbar */
+    ::-webkit-scrollbar { width: 5px; height: 5px; }
+    ::-webkit-scrollbar-track { background: var(--bg); }
+    ::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 3px; }
+    ::-webkit-scrollbar-thumb:hover { background: var(--green); }
+
+    /* Form controls */
+    .form-select, .form-control {
+      background: var(--bg3) !important; color: var(--text2) !important;
+      border-color: var(--border) !important; font-family: 'Space Grotesk', sans-serif;
+    }
+    .form-select:focus, .form-control:focus { border-color: var(--green) !important; box-shadow: 0 0 0 2px rgba(159,239,0,0.1) !important; }
+
+    /* ── NOTIFICATION BELL ─────────────────────────────────────── */
+    #notif-btn.has-notif { border-color: rgba(255,71,87,0.5); color: var(--red); }
+    #notif-btn.has-notif:hover { border-color: var(--red); }
+    @keyframes bellShake {
+      0%,100%{ transform: rotate(0); }
+      20%{ transform: rotate(-15deg); }
+      40%{ transform: rotate(15deg); }
+      60%{ transform: rotate(-10deg); }
+      80%{ transform: rotate(10deg); }
+    }
+    #notif-btn.ringing #notif-bell-icon { animation: bellShake 0.5s ease; }
+    .notif-item {
+      display: flex; gap: 10px; padding: 10px 14px;
+      border-bottom: 1px solid var(--border);
+      cursor: pointer; transition: background 0.15s;
+      text-decoration: none;
+    }
+    .notif-item:hover { background: var(--bg3); }
+    .notif-item.unread { background: rgba(255,71,87,0.03); border-left: 2px solid var(--red); }
+    .notif-item.unread.sev-high-item { border-left-color: var(--orange); background: rgba(255,107,53,0.03); }
+    .notif-item.unread.sev-medium-item { border-left-color: var(--yellow); background: rgba(255,215,0,0.03); }
+    .notif-item.unread.sev-low-item { border-left-color: var(--green); background: rgba(159,239,0,0.03); }
+    .notif-icon-wrap {
+      width: 30px; height: 30px; border-radius: 7px; flex-shrink: 0;
+      display: flex; align-items: center; justify-content: center; font-size: 0.75rem;
+      margin-top: 1px;
+    }
+    .notif-icon-critical { background: rgba(255,71,87,0.12); color: var(--red); border: 1px solid rgba(255,71,87,0.3); }
+    .notif-icon-warning  { background: rgba(255,107,53,0.1);  color: var(--orange); border: 1px solid rgba(255,107,53,0.3); }
+    .notif-icon-info     { background: rgba(0,217,255,0.08);   color: var(--cyan); border: 1px solid rgba(0,217,255,0.25); }
+    .notif-msg { font-size: 0.74rem; color: var(--text2); line-height: 1.4; flex: 1; min-width: 0; }
+    .notif-ts  { font-size: 0.62rem; color: var(--muted); margin-top: 3px; font-family: 'JetBrains Mono', monospace; }
+  </style>
+</head>
+<body>
+<div class="app-layout">
+
+<!-- ═══ LEFT SIDEBAR — Pipeline SOC ═══════════════════════════════════════════ -->
+<nav class="sidebar">
+
+  <!-- Brand dans la sidebar -->
+  <a class="sidebar-brand" href="/">
+    <span class="brand-shield"><i class="fas fa-terminal" style="color:var(--green);font-size:0.8rem;"></i></span>
+    <span class="brand-text">
+      <span class="brand-prefix">&gt;_</span><span class="brand-name">mini-soc</span>
+    </span>
+  </a>
+
+  <!-- Pipeline SOC scrollable -->
+  <div class="sidebar-nav">
+
+    <a class="nav-link {% if request.path == '/' %}active{% endif %}" href="/" style="font-weight:600;">
+      <i class="fas fa-home" style="color:var(--green);"></i>Accueil
+    </a>
+
+    <div class="nav-section-label">Pipeline SOC</div>
+
+    <a class="nav-link {% if request.path == '/logs' %}active{% endif %}" href="/logs">
+      <i class="fas fa-scroll" style="color:var(--cyan);"></i>Logs
+    </a>
+
+    <div class="inc-badge-wrapper">
+      <a class="nav-link {% if request.path == '/incidents' %}active{% endif %}" href="/incidents">
+        <i class="fas fa-ticket-alt" style="color:var(--orange);"></i>Incidents
+      </a>
+      <span id="inc-dot" class="inc-dot">0</span>
+    </div>
+
+    <a class="nav-link {% if request.path == '/queue' %}active{% endif %}" href="/queue">
+      <i class="fas fa-stream" style="color:var(--red);"></i>File de priorité
+    </a>
+
+    <a class="nav-link {% if request.path == '/investigation' %}active{% endif %}" href="/investigation">
+      <i class="fas fa-search" style="color:var(--yellow);"></i>Investigation
+    </a>
+
+    <a class="nav-link {% if request.path == '/correlation' %}active{% endif %}" href="/correlation">
+      <i class="fas fa-project-diagram" style="color:var(--purple);"></i>Corrélation
+    </a>
+
+    <a class="nav-link {% if request.path == '/playbooks' %}active{% endif %}" href="/playbooks">
+      <i class="fas fa-book-open" style="color:var(--blue);"></i>Playbooks
+    </a>
+
+    <a class="nav-link {% if request.path == '/mesures' %}active{% endif %}" href="/mesures">
+      <i class="fas fa-shield-alt" style="color:var(--green);"></i>Mesures
+    </a>
+
+    <a class="nav-link {% if request.path == '/notifications' %}active{% endif %}" href="/notifications">
+      <i class="fas fa-bell" style="color:var(--cyan);"></i>Notifications
+      <span id="sidebar-notif-badge" style="display:none;margin-left:auto;background:var(--red);color:#fff;border-radius:4px;font-size:0.55rem;font-weight:700;min-width:16px;height:16px;line-height:16px;text-align:center;padding:0 3px;font-family:'JetBrains Mono',monospace;"></span>
+    </a>
+
+    <a class="nav-link {% if request.path == '/emailing' %}active{% endif %}" href="/emailing">
+      <i class="fas fa-envelope" style="color:var(--yellow);"></i>Emailing
+    </a>
+
+    <a class="nav-link {% if request.path == '/bot' %}active{% endif %}" href="/bot"
+       style="{% if request.path != '/bot' %}border-left-color:rgba(159,239,0,0.2);{% endif %}">
+      <i class="fas fa-robot" style="color:var(--green);"></i>
+      <span style="flex:1;">SOC Bot</span>
+      <span style="font-size:0.55rem;padding:1px 5px;border-radius:3px;background:rgba(159,239,0,0.1);color:var(--green);border:1px solid rgba(159,239,0,0.2);font-family:'JetBrains Mono',monospace;letter-spacing:0.5px;">AI</span>
+    </a>
+
+    {% if current_user and current_user.level in ('L2','L3','Manager') %}
+    <div class="nav-divider" style="margin:6px 16px;"></div>
+    <div class="nav-section-label">Analyse · L2+</div>
+
+    <a class="nav-link {% if request.path == '/postexploit' %}active{% endif %}" href="/postexploit">
+      <i class="fas fa-skull-crossbones" style="color:var(--red);"></i>Post-Exploit
+    </a>
+
+    <a class="nav-link {% if request.path == '/stealth_compare' %}active{% endif %}" href="/stealth_compare">
+      <i class="fas fa-user-ninja" style="color:var(--purple);"></i>Stealth vs Kibana
+    </a>
+
+    <a class="nav-link {% if request.path == '/analytics' %}active{% endif %}" href="/analytics">
+      <i class="fas fa-chart-line" style="color:var(--cyan);"></i>Analytics
+    </a>
+    {% endif %}
+
+  </div><!-- /sidebar-nav -->
+
+  <!-- Bas sidebar : live + shift -->
+  <div class="sidebar-bottom">
+    <div id="shift-indicator" onclick="window.location.href='/admin/shifts'" title="Shift actif" style="cursor:pointer;display:none;">
+      <i id="shift-icon" class="fas fa-clock" style="font-size:0.7rem;"></i>
+      <div style="flex:1;min-width:0;">
+        <div id="shift-name" style="font-weight:600;font-size:0.72rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">—</div>
+        <div id="shift-members-count" style="font-size:0.62rem;color:var(--muted);"></div>
+      </div>
+    </div>
+    <div class="live-pulse">
+      <span class="live-dot"></span>
+      <span>Live</span>
+    </div>
+  </div>
+
+</nav>
+
+<!-- ═══ MAIN WRAPPER (topbar + contenu) ═══════════════════════════════════════ -->
+<div class="main-wrapper">
+
+<!-- ── TOPBAR ── -->
+<header class="topbar">
+
+  <!-- Admin links (L3/Manager) -->
+  {% if current_user and current_user.level in ('L3','Manager') %}
+  <div style="display:flex;align-items:center;gap:2px;font-size:0.68rem;color:rgba(255,71,87,0.5);font-family:'JetBrains Mono',monospace;letter-spacing:1px;margin-right:10px;flex-shrink:0;">
+    <i class="fas fa-shield-alt" style="font-size:0.6rem;margin-right:4px;"></i>ADMIN
+  </div>
+  <div class="topbar-admin-links">
+    <a class="topbar-admin-link {% if request.path == '/admin/users' %}active{% endif %}" href="/admin/users">
+      <i class="fas fa-users-cog"></i>Utilisateurs
+    </a>
+    <a class="topbar-admin-link {% if request.path == '/admin/audit' %}active{% endif %}" href="/admin/audit">
+      <i class="fas fa-clipboard-list"></i>Audit
+    </a>
+    <a class="topbar-admin-link {% if request.path == '/admin/notifications' %}active{% endif %}" href="/admin/notifications">
+      <i class="fas fa-bell"></i>Notifications
+    </a>
+    <a class="topbar-admin-link {% if request.path == '/admin/shifts' %}active{% endif %}" href="/admin/shifts">
+      <i class="fas fa-clock"></i>Shifts
+    </a>
+  </div>
+  {% else %}
+  <div style="flex:1;"></div>
+  {% endif %}
+
+  <!-- Lien Kibana (droite, avant compte) -->
+  <a href="http://localhost:5601" target="_blank" class="topbar-btn" style="margin-left:8px;flex-shrink:0;color:var(--yellow);border-color:rgba(255,215,0,0.3);" title="Ouvrir Kibana">
+    <i class="fas fa-chart-bar" style="font-size:0.65rem;"></i>Kibana
+  </a>
+
+  <!-- ── NOTIFICATIONS BELL ── -->
+  <div id="notif-wrapper" style="position:relative;margin-left:6px;flex-shrink:0;">
+    <button id="notif-btn" onclick="notifToggle()" class="topbar-btn" style="position:relative;padding:5px 9px;" title="Notifications">
+      <i class="fas fa-bell" style="font-size:0.7rem;" id="notif-bell-icon"></i>
+      <span id="notif-badge" style="display:none;position:absolute;top:-5px;right:-5px;background:var(--red);color:#fff;border-radius:5px;font-size:0.55rem;font-weight:700;min-width:16px;height:16px;line-height:16px;text-align:center;padding:0 3px;border:2px solid var(--bg2);font-family:'JetBrains Mono',monospace;"></span>
+    </button>
+
+    <!-- Dropdown panel -->
+    <div id="notif-panel" style="display:none;position:absolute;top:calc(100% + 8px);right:0;width:340px;background:var(--bg2);border:1px solid var(--border);border-radius:8px;box-shadow:0 12px 40px rgba(0,0,0,0.6);z-index:9999;overflow:hidden;">
+      <!-- Header -->
+      <div style="display:flex;align-items:center;justify-content:space-between;padding:10px 14px;border-bottom:1px solid var(--border);background:var(--bg3);">
+        <div style="display:flex;align-items:center;gap:7px;">
+          <i class="fas fa-bell" style="color:var(--cyan);font-size:0.75rem;"></i>
+          <span style="font-size:0.75rem;font-weight:700;color:var(--text2);font-family:'JetBrains Mono',monospace;">Notifications</span>
+          <span id="notif-level-tag" style="font-size:0.6rem;padding:1px 6px;border-radius:4px;font-family:'JetBrains Mono',monospace;background:rgba(159,239,0,0.1);color:var(--green);border:1px solid rgba(159,239,0,0.25);"></span>
+        </div>
+        <button onclick="notifMarkAll()" style="background:none;border:1px solid var(--border);border-radius:4px;color:var(--muted);font-size:0.65rem;padding:3px 8px;cursor:pointer;transition:color 0.15s,border-color 0.15s;" onmouseover="this.style.color='var(--cyan)';this.style.borderColor='var(--cyan)'" onmouseout="this.style.color='var(--muted)';this.style.borderColor='var(--border)'">
+          Tout lire
+        </button>
+      </div>
+      <!-- List -->
+      <div id="notif-list" style="max-height:360px;overflow-y:auto;"></div>
+      <!-- Footer -->
+      <div style="padding:8px 14px;border-top:1px solid var(--border);background:var(--bg3);text-align:center;">
+        <a href="/notifications" style="font-size:0.68rem;color:var(--muted);text-decoration:none;transition:color 0.15s;" onmouseover="this.style.color='var(--cyan)'" onmouseout="this.style.color='var(--muted)'">
+          <i class="fas fa-external-link-alt me-1" style="font-size:0.6rem;"></i>Voir tout l'historique
+        </a>
+      </div>
+    </div>
+  </div>
+  <!-- ── /NOTIFICATIONS BELL ── -->
+
+  <div class="topbar-divider"></div>
+
+  <!-- Compte utilisateur (droite) -->
+  <div id="user-info" class="topbar-user">
+    <span id="user-badge" class="user-level-badge">—</span>
+    <span id="user-name" class="topbar-user-name">—</span>
+    <div class="topbar-divider"></div>
+    <a href="/profile" class="topbar-btn" title="Changer le mot de passe">
+      <i class="fas fa-key" style="font-size:0.65rem;"></i>Mot de passe
+    </a>
+    <a href="/logout" class="topbar-btn logout" title="Déconnexion">
+      <i class="fas fa-sign-out-alt" style="font-size:0.65rem;"></i>Déconnexion
+    </a>
+  </div>
+
+</header>
+
+<script>
+// Enforce scroll lock on html/body — prevent any page template from undoing it
+(function() {
+  document.documentElement.style.cssText += ';overflow:hidden!important;height:100%!important;';
+  document.body.style.cssText += ';overflow:hidden!important;height:100%!important;';
+})();
+
+// Accordion toggle
+function toggleGroup(id) {
+  const el  = document.getElementById(id);
+  const btn = el.querySelector('.nav-group-btn');
+  const wasOpen = el.classList.contains('open');
+  // Close all
+  document.querySelectorAll('.nav-group').forEach(g => {
+    g.classList.remove('open');
+    const b = g.querySelector('.nav-group-btn');
+    if (b) b.classList.remove('open');
+  });
+  // Open clicked if it was closed
+  if (!wasOpen) {
+    el.classList.add('open');
+    btn.classList.add('open');
+  }
+}
+
+// Auth info — show user (topbar)
+fetch('/api/current_user').then(r => r.json()).then(u => {
+  if (u.authenticated) {
+    document.getElementById('user-badge').textContent = u.level;
+    document.getElementById('user-name').textContent  = u.name;
+    document.getElementById('user-info').style.display = 'flex';
+  }
+}).catch(() => {});
+
+// Shift indicator
+(async function loadShiftIndicator() {
+  try {
+    const d = await fetch('/api/shifts/current').then(r => r.json());
+    const s = d.current;
+    if (!s) return;
+    const colorMap = {blue:'var(--blue)',orange:'var(--orange)',purple:'var(--purple)',
+                      green:'var(--green)',red:'var(--red)',yellow:'var(--yellow)'};
+    const el = document.getElementById('shift-indicator');
+    document.getElementById('shift-icon').className   = `fas ${s.icon || 'fa-clock'}`;
+    document.getElementById('shift-icon').style.color = colorMap[s.color] || 'var(--blue)';
+    document.getElementById('shift-name').textContent = s.name;
+    document.getElementById('shift-name').style.color = colorMap[s.color] || 'var(--blue)';
+    const mc = (s.members || []).length;
+    document.getElementById('shift-members-count').textContent = mc ? `${mc} analyst${mc>1?'es':''}` : '';
+    el.style.display = 'flex';
+  } catch(e) {}
+})();
+
+// Incidents badge
+function refreshIncBadge() {
+  fetch('/api/incidents/stats').then(r => r.json()).then(s => {
+    const n  = s.awaiting || 0;
+    const el = document.getElementById('inc-dot');
+    if (!el) return;
+    if (n > 0) { el.textContent = n > 99 ? '99+' : n; el.style.display = 'block'; }
+    else        { el.style.display = 'none'; }
+  }).catch(() => {});
+}
+refreshIncBadge();
+setInterval(refreshIncBadge, 30000);
+</script>
+
+<div class="main-scroll">
+<div class="page-content">
+  {% block content %}{% endblock %}
+</div>
+
+<!-- Footer -->
+<footer style="border-top:1px solid var(--border);background:rgba(17,25,39,0.95);padding:10px 24px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;margin-top:20px;position:relative;z-index:1;">
+  <div style="display:flex;align-items:center;gap:10px;font-size:0.68rem;color:var(--muted);font-family:'JetBrains Mono',monospace;">
+    <span style="color:var(--green);font-weight:700;letter-spacing:1px;"><i class="fas fa-terminal me-1"></i>mini-soc</span>
+    <span style="color:var(--border2);">──</span>
+    <span>Security Operations Center</span>
+    <span style="color:var(--border2);">──</span>
+    <span style="color:rgba(159,239,0,0.6);">v2.0</span>
+  </div>
+  <div style="display:flex;align-items:center;gap:16px;font-size:0.68rem;color:var(--muted);font-family:'JetBrains Mono',monospace;">
+    <span><i class="fas fa-university me-1" style="color:var(--cyan);"></i>PFA 2025–2026 · INPT</span>
+    <span style="display:flex;align-items:center;gap:5px;">
+      <span class="live-dot" style="width:5px;height:5px;display:inline-block;"></span>
+      <span id="footer-time" style="color:var(--green);"></span>
+    </span>
+  </div>
+</footer>
+</div><!-- /main-scroll -->
+</div><!-- /main-wrapper -->
+
+</div><!-- /app-layout -->
+
+<script>
+(function footerClock() {
+  function pad(n){ return String(n).padStart(2,'0'); }
+  function tick() {
+    const d = new Date();
+    const el = document.getElementById('footer-time');
+    if (el) el.textContent = `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
+  }
+  tick(); setInterval(tick, 1000);
+})();
+</script>
+
+<!-- ═══ SOC BOT ════════════════════════════════════════════════════════════════ -->
+<style>
+#soc-bot-btn {
+  position:fixed; bottom:24px; left:24px; z-index:9998;
+  width:52px; height:52px; border-radius:10px;
+  background:linear-gradient(135deg,#1A2332,#111927);
+  border:1px solid #2A3F5F;
+  cursor:pointer; display:flex; align-items:center; justify-content:center;
+  box-shadow:0 4px 20px rgba(0,0,0,0.6);
+  transition:border-color 0.3s, box-shadow 0.3s, transform 0.2s;
+  user-select:none;
+}
+#soc-bot-btn:hover { transform:scale(1.06); border-color:#9FEF00; box-shadow:0 4px 20px rgba(159,239,0,0.2); }
+#soc-bot-btn.alert {
+  border-color:#FF4757;
+  box-shadow:0 0 0 0 rgba(255,71,87,0.6);
+  animation:botPulse 1.4s ease-out infinite;
+}
+@keyframes botPulse {
+  0%  { box-shadow:0 0 0 0 rgba(255,71,87,0.6); }
+  70% { box-shadow:0 0 0 14px rgba(255,71,87,0); }
+  100%{ box-shadow:0 0 0 0   rgba(255,71,87,0); }
+}
+#soc-bot-badge {
+  position:absolute; top:-5px; right:-5px;
+  background:#FF4757; color:#fff;
+  border-radius:5px; font-size:10px; font-weight:700;
+  min-width:18px; height:18px; line-height:18px; text-align:center; padding:0 4px;
+  border:2px solid #111927; display:none; font-family:'JetBrains Mono',monospace;
+}
+
+#soc-bot-panel {
+  position:fixed; bottom:86px; left:24px; z-index:9997;
+  width:365px;
+  background:#1A2332; border:1px solid #2A3F5F; border-radius:10px;
+  box-shadow:0 12px 48px rgba(0,0,0,0.7), 0 0 0 1px rgba(159,239,0,0.04);
+  display:none; flex-direction:column; overflow:hidden;
+  transform:translateY(20px) scale(0.97); opacity:0;
+  transition:transform 0.3s cubic-bezier(.22,.68,0,1.2), opacity 0.3s;
+  max-height:520px;
+}
+#soc-bot-panel.open { display:flex; }
+#soc-bot-panel.visible { transform:translateY(0) scale(1); opacity:1; }
+
+.bot-header {
+  display:flex; align-items:center; justify-content:space-between;
+  padding:12px 14px; border-bottom:1px solid #2A3F5F;
+  background:linear-gradient(90deg,#1E2B3C,#1A2332);
+  flex-shrink:0;
+}
+.bot-avatar-ring {
+  width:34px; height:34px; border-radius:8px;
+  background:linear-gradient(135deg,#1E2B3C,#111927);
+  border:1px solid #2A3F5F; display:flex; align-items:center; justify-content:center;
+  position:relative; flex-shrink:0; transition:border-color 0.3s;
+}
+.bot-avatar-ring.alert { border-color:#FF4757; box-shadow:0 0 8px rgba(255,71,87,0.3); }
+.bot-avatar-ring .bot-eye-l, .bot-avatar-ring .bot-eye-r {
+  position:absolute; width:5px; height:5px; border-radius:50%; background:#9FEF00;
+  top:9px; transition:background 0.3s;
+}
+.bot-avatar-ring .bot-eye-l { left:7px; }
+.bot-avatar-ring .bot-eye-r { right:7px; }
+.bot-avatar-ring.alert .bot-eye-l,
+.bot-avatar-ring.alert .bot-eye-r { background:#FF4757; }
+.bot-avatar-ring .bot-mouth {
+  position:absolute; bottom:8px; left:50%; transform:translateX(-50%);
+  width:12px; height:5px; border-radius:0 0 6px 6px;
+  border:1.5px solid #9FEF00; border-top:none; transition:border-color 0.3s;
+}
+.bot-avatar-ring.alert .bot-mouth { border-color:#FF4757; border-radius:6px 6px 0 0; border-bottom:none; border-top:1.5px solid #FF4757; }
+.bot-name { font-size:0.8rem; font-weight:700; color:#C8D6EC; font-family:'JetBrains Mono',monospace; }
+.bot-status { font-size:0.6rem; margin-top:2px; font-family:'JetBrains Mono',monospace; }
+.bot-status.ok   { color:#9FEF00; }
+.bot-status.alert{ color:#FF4757; }
+.bot-header-close {
+  background:none; border:none; color:#4B5875; cursor:pointer;
+  font-size:13px; padding:4px 6px; border-radius:5px;
+  transition:color 0.2s, background 0.2s;
+}
+.bot-header-close:hover { color:#C8D6EC; background:#243244; }
+
+#bot-messages {
+  flex:1; overflow-y:auto; padding:14px 12px; display:flex; flex-direction:column; gap:10px;
+  scrollbar-width:thin; scrollbar-color:#2A3F5F transparent;
+}
+.bot-msg { display:flex; gap:8px; align-items:flex-start; }
+.bot-msg-bubble {
+  border-radius:4px 10px 10px 10px; padding:9px 12px;
+  font-size:0.74rem; line-height:1.5; max-width:290px;
+  border:1px solid transparent;
+}
+.bot-msg.bot .bot-msg-bubble  { background:#1E2B3C; border-color:#2A3F5F; color:#A4B1CD; }
+.bot-msg.alert .bot-msg-bubble{ background:rgba(255,71,87,0.07); border-color:rgba(255,71,87,0.3); color:#C8D6EC; }
+.bot-msg.info  .bot-msg-bubble{ background:rgba(0,217,255,0.06); border-color:rgba(0,217,255,0.2); color:#A4B1CD; }
+.bot-msg.warn  .bot-msg-bubble{ background:rgba(255,107,53,0.07); border-color:rgba(255,107,53,0.3); color:#C8D6EC; }
+.bot-msg.ok    .bot-msg-bubble{ background:rgba(159,239,0,0.06); border-color:rgba(159,239,0,0.25); color:#A4B1CD; }
+.bot-msg-avatar {
+  width:26px; height:26px; border-radius:6px; flex-shrink:0;
+  background:#1E2B3C; border:1px solid #2A3F5F;
+  display:flex; align-items:center; justify-content:center;
+  font-size:11px; margin-top:2px;
+}
+.bot-typing { display:flex; gap:4px; align-items:center; padding:4px 2px; }
+.bot-typing span {
+  width:6px; height:6px; border-radius:50%; background:#4B5875;
+  display:inline-block; animation:botDot 1.2s infinite;
+}
+.bot-typing span:nth-child(2){ animation-delay:.2s; }
+.bot-typing span:nth-child(3){ animation-delay:.4s; }
+@keyframes botDot {
+  0%,80%,100%{ transform:scale(0.7); opacity:0.4; }
+  40%{ transform:scale(1); opacity:1; }
+}
+.bot-tag {
+  display:inline-block; font-size:0.6rem; font-weight:700;
+  padding:2px 7px; border-radius:4px; margin:1px 2px;
+  text-transform:uppercase; letter-spacing:0.4px;
+  font-family:'JetBrains Mono',monospace;
+}
+.bot-tag.red  { background:rgba(255,71,87,0.12);  color:#FF4757; border:1px solid rgba(255,71,87,0.35); }
+.bot-tag.blue { background:rgba(0,217,255,0.08);   color:#00D9FF; border:1px solid rgba(0,217,255,0.3); }
+.bot-tag.ora  { background:rgba(255,107,53,0.1);   color:#FF6B35; border:1px solid rgba(255,107,53,0.35); }
+.bot-tag.grn  { background:rgba(159,239,0,0.08);   color:#9FEF00; border:1px solid rgba(159,239,0,0.3); }
+
+#bot-input-area {
+  border-top:1px solid #2A3F5F; padding:8px 10px;
+  display:flex; gap:6px; align-items:center; flex-shrink:0;
+  background:#111927;
+}
+#bot-input {
+  flex:1; background:#1A2332; border:1px solid #2A3F5F; border-radius:6px;
+  color:#C8D6EC; font-size:0.74rem; padding:7px 10px; outline:none;
+  transition:border-color 0.2s; resize:none; font-family:'Space Grotesk',sans-serif; line-height:1.4;
+  min-height:34px; max-height:80px;
+}
+#bot-input:focus { border-color:#9FEF00; box-shadow:0 0 0 2px rgba(159,239,0,0.08); }
+#bot-input::placeholder { color:#4B5875; }
+#bot-send-btn {
+  width:34px; height:34px; border-radius:6px; border:none;
+  background:#9FEF00; color:#111927; cursor:pointer;
+  display:flex; align-items:center; justify-content:center; font-size:13px;
+  flex-shrink:0; transition:background 0.2s, transform 0.1s;
+}
+#bot-send-btn:hover  { background:#b5f533; }
+#bot-send-btn:active { transform:scale(0.93); }
+#bot-send-btn:disabled { background:#1E2B3C; color:#4B5875; cursor:not-allowed; }
+
+#bot-actions {
+  border-top:1px solid #2A3F5F; padding:10px 12px;
+  display:flex; flex-wrap:wrap; gap:6px; flex-shrink:0;
+  background:#111927;
+}
+.bot-action-btn {
+  flex:1; min-width:100px; padding:7px 10px;
+  border-radius:6px; border:1px solid #2A3F5F;
+  background:#1A2332; color:#A4B1CD; cursor:pointer;
+  font-size:0.71rem; font-weight:600; transition:all 0.2s;
+  display:flex; align-items:center; gap:6px; justify-content:center;
+}
+.bot-action-btn:hover { background:#1E2B3C; border-color:#9FEF00; color:#C8D6EC; }
+.bot-action-btn.danger { border-color:rgba(255,71,87,0.4); color:#FF4757; }
+.bot-action-btn.danger:hover { background:rgba(255,71,87,0.08); border-color:#FF4757; }
+.bot-action-btn.primary{ border-color:rgba(159,239,0,0.35); color:#9FEF00; }
+.bot-action-btn.primary:hover{ background:rgba(159,239,0,0.07); border-color:#9FEF00; }
+.bot-action-btn:disabled { opacity:0.5; cursor:not-allowed; }
+</style>
+
+<!-- ── Bouton flottant SOC Bot ── -->
+<div id="soc-bot-btn" onclick="socBotToggle()" title="SOC Bot — Clic pour ouvrir">
+  <div id="bot-btn-avatar" style="position:relative;width:32px;height:32px;">
+    <div style="position:absolute;inset:0;border-radius:7px;background:#1E2B3C;border:1px solid #2A3F5F;"></div>
+    <div style="position:absolute;top:7px;left:6px;width:6px;height:6px;border-radius:50%;background:#9FEF00;" id="bot-eye-l"></div>
+    <div style="position:absolute;top:7px;right:6px;width:6px;height:6px;border-radius:50%;background:#9FEF00;" id="bot-eye-r"></div>
+    <div style="position:absolute;bottom:6px;left:50%;transform:translateX(-50%);width:14px;height:6px;border-radius:0 0 7px 7px;border:1.5px solid #9FEF00;border-top:none;" id="bot-mouth"></div>
+    <div style="position:absolute;top:-7px;left:50%;transform:translateX(-50%);width:2px;height:7px;background:#2A3F5F;"></div>
+    <div style="position:absolute;top:-10px;left:50%;transform:translateX(-50%);width:5px;height:5px;border-radius:50%;background:#9FEF00;box-shadow:0 0 5px #9FEF00;" id="bot-antenna-dot"></div>
+  </div>
+  <div id="soc-bot-badge"></div>
+</div>
+
+<!-- ── Panel flottant amélioré ── -->
+<div id="soc-bot-panel">
+  <div class="bot-header">
+    <div style="display:flex;align-items:center;gap:10px;">
+      <div class="bot-avatar-ring" id="bot-avatar-ring">
+        <div class="bot-eye-l"></div>
+        <div class="bot-eye-r"></div>
+        <div class="bot-mouth"></div>
+      </div>
+      <div>
+        <div class="bot-name">SOC Bot <span style="font-size:0.58rem;color:#4B5875;font-weight:400;font-family:'Space Grotesk',sans-serif;">gemma2:2b</span></div>
+        <div class="bot-status ok" id="bot-status-line">
+          <span style="display:inline-block;width:6px;height:6px;border-radius:50%;background:#9FEF00;box-shadow:0 0 4px #9FEF00;margin-right:4px;vertical-align:middle;"></span>En surveillance active
+        </div>
+      </div>
+    </div>
+    <div style="display:flex;align-items:center;gap:5px;">
+      <a href="/bot" title="Ouvrir en plein écran" style="background:none;border:1px solid #2A3F5F;color:#4B5875;font-size:11px;padding:4px 7px;border-radius:5px;text-decoration:none;transition:color 0.2s,border-color 0.2s;display:flex;align-items:center;gap:4px;" onmouseover="this.style.color='#9FEF00';this.style.borderColor='#9FEF00'" onmouseout="this.style.color='#4B5875';this.style.borderColor='#2A3F5F'">
+        <i class="fas fa-expand-alt"></i>
+      </a>
+      <button class="bot-header-close" onclick="socBotClose()"><i class="fas fa-times"></i></button>
+    </div>
+  </div>
+  <div id="bot-messages"></div>
+  <div id="bot-input-area">
+    <textarea id="bot-input" rows="1" placeholder="Posez une question…" onkeydown="socBotInputKey(event)"></textarea>
+    <button id="bot-send-btn" onclick="socBotSend()" title="Envoyer"><i class="fas fa-paper-plane"></i></button>
+  </div>
+  <div id="bot-actions"></div>
+</div>
+
+<script>
+(function SocBot() {
+let _open=false,_alertMode=false,_lastSeen=localStorage.getItem('pe_last_seen')||new Date(0).toISOString(),_unread=0,_currentIP=null,_initialized=false;
+const TECH_ACTIONS={execution:['Identifier et tuer le processus malveillant','Isoler la machine du réseau','Analyser les processus actifs : ps aux'],persistence:['Supprimer l\'utilisateur backdoor créé','Révoquer les clés SSH non autorisées','Vérifier crontab : crontab -l -u root','Audit : /etc/passwd, /etc/sudoers'],privilege_escalation:['Révoquer les droits sudo de l\'attaquant','Réinitialiser le mot de passe compromis','Vérifier les binaires SUID : find / -perm -4000','Auditer /var/log/auth.log'],defense_evasion:['Restaurer les logs depuis backup','Activer auditd : systemctl start auditd','Vérifier l\'intégrité des fichiers (AIDE/Tripwire)','Réinitialiser HISTFILE sur tous les comptes'],credential_access:['Changer TOUS les mots de passe immédiatement','Vérifier /etc/shadow — hash compromis ?','Révoquer les tokens et clés API exposés','Notifier les utilisateurs concernés'],discovery:['Surveiller les accès suivants depuis cette IP','Renforcer la segmentation réseau','Vérifier ce qui a été énuméré (ps, netstat, id)','Activer le logging auditd des commandes'],lateral_movement:['Bloquer les flux SSH sortants sur le firewall','Auditer toutes les clés SSH autorisées','Vérifier les connexions actives : who, w, last','Isoler les machines accessibles depuis la cible'],collection:['Chiffrer les données sensibles restantes','Vérifier l\'historique des accès fichiers','Auditer /tmp — archive loot.tar.gz ?','Inventorier les fichiers .conf/.key/.env exposés'],exfiltration:['COUPER LE RÉSEAU IMMÉDIATEMENT','Contacter le RSSI / responsable sécurité','Préserver les logs avant toute action','Analyser le trafic sortant (tcpdump, netflow)'],c2:['Terminer le processus reverse shell','Bloquer l\'IP C2 au niveau firewall','Analyser les connexions actives : ss -tulnp','Isoler la machine — incident majeur']};
+const TECH_LABELS={execution:'Exécution',persistence:'Persistance',privilege_escalation:'Élévation de privilèges',defense_evasion:'Évasion défense',credential_access:'Vol de credentials',discovery:'Reconnaissance',lateral_movement:'Mouvement latéral',collection:'Collecte',exfiltration:'Exfiltration',c2:'C&C / Reverse shell'};
+const SEV_COL={critical:'#FF4757',high:'#FF6B35',medium:'#FFD700',low:'#4B5875'};
+function _mc(){return document.getElementById('bot-messages');}
+function _appendMsg(type,html,delay=0){return new Promise(resolve=>{setTimeout(()=>{const el=document.createElement('div');el.className=`bot-msg ${type}`;const icon=type==='alert'?'🔴':type==='warn'?'⚠️':type==='ok'?'✅':type==='info'?'🔵':'🤖';el.innerHTML=`<div class="bot-msg-avatar">${icon}</div><div class="bot-msg-bubble">${html}</div>`;_mc().appendChild(el);_mc().scrollTop=_mc().scrollHeight;resolve();},delay);})}
+function _showTyping(ms=900){return new Promise(resolve=>{const el=document.createElement('div');el.className='bot-msg bot';el.id='bot-typing-indicator';el.innerHTML=`<div class="bot-msg-avatar">🤖</div><div class="bot-msg-bubble"><div class="bot-typing"><span></span><span></span><span></span></div></div>`;_mc().appendChild(el);_mc().scrollTop=_mc().scrollHeight;setTimeout(()=>{el.remove();resolve();},ms);});}
+function _setAlertMode(on){_alertMode=on;const btn=document.getElementById('soc-bot-btn'),ring=document.getElementById('bot-avatar-ring'),sl=document.getElementById('bot-status-line'),el=document.getElementById('bot-eye-l'),er=document.getElementById('bot-eye-r'),m=document.getElementById('bot-mouth'),ad=document.getElementById('bot-antenna-dot');if(on){btn.classList.add('alert');ring&&ring.classList.add('alert');sl.className='bot-status alert';sl.textContent='⚡ ALERTE — Post-exploit détectée';if(el)el.style.background='#FF4757';if(er)er.style.background='#FF4757';if(m){m.style.borderColor='#FF4757';m.style.borderRadius='6px 6px 0 0';m.style.borderBottom='none';m.style.borderTop='1.5px solid #FF4757';}if(ad)ad.style.background='#FF4757';}else{btn.classList.remove('alert');ring&&ring.classList.remove('alert');sl.className='bot-status ok';sl.textContent='● En surveillance active';if(el)el.style.background='#9FEF00';if(er)er.style.background='#9FEF00';if(m){m.style.borderColor='#9FEF00';m.style.borderRadius='0 0 7px 7px';m.style.borderBottom='';m.style.borderTop='none';}if(ad)ad.style.background='#9FEF00';}}
+function _setBadge(n){_unread=n;const b=document.getElementById('soc-bot-badge');if(n>0){b.style.display='block';b.textContent=n>9?'9+':n;}else b.style.display='none';}
+function _setActions(ev){const el=document.getElementById('bot-actions'),ip=ev.src_ip||'';el.innerHTML=`<button class="bot-action-btn danger" onclick="socBotQuickBlock('${ip}')"><i class="fas fa-ban"></i> Bloquer ${ip||'IP'}</button><a href="/postexploit" class="bot-action-btn primary" style="text-decoration:none;"><i class="fas fa-skull-crossbones"></i> Kill Chain</a><a href="/incidents" class="bot-action-btn" style="text-decoration:none;"><i class="fas fa-ticket-alt"></i> Incidents</a>`;}
+async function _triggerAlert(ev){_currentIP=ev.src_ip||'';const sev=ev.severity||'critical',tech=ev.technique||'',tactic=(ev.tactic||'').split('—').pop().trim(),techLabel=TECH_LABELS[tech]||tech,sevCol=SEV_COL[sev]||'#FF4757',ts=(ev.detected_at||'').slice(0,19).replace('T',' '),matched=(ev.matched||'').slice(0,80),actions=TECH_ACTIONS[tech]||['Isoler la machine','Contacter le responsable sécurité','Préserver les logs'];_setAlertMode(true);_setBadge(_unread+1);if(!_open)socBotOpen();_mc().innerHTML='';document.getElementById('bot-actions').innerHTML='';await _showTyping(700);await _appendMsg('alert',`<b style="color:#FF4757;font-size:0.82rem;">🚨 POST-EXPLOITATION DÉTECTÉE</b><br><span class="bot-tag red">${sev.toUpperCase()}</span><span class="bot-tag ora">${tactic}</span><br><span style="color:#4B5875;font-size:0.68rem;">${ts} UTC</span>`);await _showTyping(600);await _appendMsg('info',`IP attaquante : <b style="color:#9FEF00;font-family:monospace;">${_currentIP||'(inconnue)'}</b><br>Technique : <b style="color:${sevCol};">${techLabel}</b><br>Pattern détecté : <code style="font-size:0.67rem;color:#FFD700;">${matched}</code>`);await _showTyping(800);const recHTML=actions.map(a=>`<div style="display:flex;gap:6px;align-items:flex-start;margin-bottom:5px;"><span style="color:#FF4757;margin-top:1px;flex-shrink:0;">▸</span><span>${a}</span></div>`).join('');await _appendMsg('warn',`<b style="font-size:0.75rem;">Actions recommandées :</b><br><div style="margin-top:6px;">${recHTML}</div>`);await _showTyping(400);await _appendMsg('bot','Les équipes L1/L2/L3 ont été <span style="color:#9FEF00;font-weight:700;">notifiées par email</span>. Utilisez les boutons ci-dessous pour répondre immédiatement.');_setActions(ev);}
+window.socBotQuickBlock=async function(ip){if(!ip){_appendMsg('warn','IP inconnue — blocage impossible');return;}const btn=document.querySelector('.bot-action-btn.danger');if(btn){btn.disabled=true;btn.innerHTML='<i class="fas fa-spinner fa-spin"></i> Blocage…';}try{const ri=await fetch(`/api/postexploit/ip_incidents/${encodeURIComponent(ip)}`).then(r=>r.json()),inc=ri.incidents&&ri.incidents[0];if(inc&&inc.id){const rb=await fetch(`/api/incidents/${inc.id}/mitigate`,{method:'POST'}).then(r=>r.json());if(rb.status==='ok'){await _appendMsg('ok',`<b style="color:#9FEF00;">✔ IP bloquée</b> — <code style="font-family:monospace;color:#9FEF00;">${ip}</code> — règle iptables DROP appliquée.`);if(btn){btn.innerHTML='<i class="fas fa-check"></i> Bloquée';btn.style.color='#9FEF00';btn.style.borderColor='#9FEF00';}}else{await _appendMsg('warn',`Erreur blocage : ${rb.error||'inconnu'}`);if(btn){btn.disabled=false;btn.innerHTML=`<i class="fas fa-ban"></i> Réessayer`;}}}else{await _appendMsg('warn','Aucun incident trouvé pour cette IP.');if(btn){btn.disabled=false;btn.innerHTML=`<i class="fas fa-ban"></i> Bloquer ${ip}`;}}}catch(e){await _appendMsg('warn','Erreur réseau lors du blocage.');if(btn){btn.disabled=false;btn.innerHTML=`<i class="fas fa-ban"></i> Réessayer`;}}};
+function socBotOpen(){_open=true;_setBadge(0);const p=document.getElementById('soc-bot-panel');p.classList.add('open');requestAnimationFrame(()=>p.classList.add('visible'));if(!_initialized){_initialized=true;_appendMsg('bot','Bonjour 👋 Je surveille votre infrastructure en temps réel.<br>Je vous alerterai dès qu\'une activité post-exploitation est détectée.');document.getElementById('bot-actions').innerHTML=`<a href="/postexploit" class="bot-action-btn primary" style="text-decoration:none;"><i class="fas fa-skull-crossbones"></i> Post-Exploit</a><a href="/incidents" class="bot-action-btn" style="text-decoration:none;"><i class="fas fa-ticket-alt"></i> Incidents</a>`;}}
+function socBotClose(){_open=false;const p=document.getElementById('soc-bot-panel');p.classList.remove('visible');setTimeout(()=>p.classList.remove('open'),300);}
+window.socBotToggle=function(){_open?socBotClose():socBotOpen();};
+window.socBotClose=socBotClose;
+function _appendUserMsg(text){const el=document.createElement('div');el.style.cssText='display:flex;justify-content:flex-end;margin-bottom:2px;';el.innerHTML=`<div style="background:rgba(88,166,255,0.12);border:1px solid rgba(88,166,255,0.25);border-radius:12px 4px 12px 12px;padding:8px 11px;font-size:0.75rem;color:#A4B1CD;max-width:260px;word-break:break-word;line-height:1.4;">${text.replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/\n/g,'<br>')}</div>`;_mc().appendChild(el);_mc().scrollTop=_mc().scrollHeight;}
+function _renderBotReply(text){return text.replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/```([\s\S]*?)```/g,'<pre style="background:#111927;border:1px solid #334E6E;border-radius:6px;padding:8px;font-size:0.67rem;overflow-x:auto;margin:6px 0;font-family:monospace;color:#FFD700;">$1</pre>').replace(/`([^`]+)`/g,'<code style="background:#111927;padding:1px 5px;border-radius:3px;font-size:0.68rem;color:#FFD700;font-family:monospace;">$1</code>').replace(/\*\*(.+?)\*\*/g,'<b style="color:#C8D6EC;">$1</b>').replace(/\n/g,'<br>');}
+window.socBotSend=async function(){const inp=document.getElementById('bot-input'),btn=document.getElementById('bot-send-btn'),text=(inp.value||'').trim();if(!text)return;inp.value='';inp.style.height='';btn.disabled=true;_appendUserMsg(text);const botRow=document.createElement('div');botRow.className='bot-msg bot';botRow.innerHTML=`<div class="bot-msg-avatar">🤖</div><div class="bot-msg-bubble"><div class="bot-typing"><span></span><span></span><span></span></div><div style="font-size:0.7rem;color:var(--muted);margin-top:4px;">gemma2:2b · génération en cours…</div></div>`;_mc().appendChild(botRow);_mc().scrollTop=_mc().scrollHeight;const bubble=botRow.querySelector('.bot-msg-bubble');let fullText='';try{const resp=await fetch('/api/bot/chat',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({message:text})});if(!resp.ok)throw new Error('HTTP '+resp.status);const reader=resp.body.getReader(),decoder=new TextDecoder();let buf='';while(true){const{done,value}=await reader.read();if(done)break;buf+=decoder.decode(value,{stream:true});const lines=buf.split('\n');buf=lines.pop();for(const line of lines){if(!line.startsWith('data: '))continue;const payload=line.slice(6);if(payload==='[DONE]')break;try{const d=JSON.parse(payload);if(d.error)fullText+=`\n⚠ ${d.error}`;else if(d.token)fullText+=d.token;bubble.innerHTML=_renderBotReply(fullText)||'<span style="opacity:.4">...</span>';_mc().scrollTop=_mc().scrollHeight;}catch(_){}}}if(!fullText)bubble.innerHTML='<span style="color:var(--muted)">Pas de réponse.</span>';}catch(e){bubble.innerHTML=`<span style="color:var(--red)">Erreur de connexion au bot.</span>`;}btn.disabled=false;inp.focus();};
+window.socBotInputKey=function(e){const inp=document.getElementById('bot-input');inp.style.height='auto';inp.style.height=Math.min(inp.scrollHeight,80)+'px';if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();socBotSend();}};
+let _pollActive=true;
+async function _poll(){if(!_pollActive)return;try{const r=await fetch(`/api/postexploit/latest?since=${encodeURIComponent(_lastSeen)}`);if(r.status===302||r.status===401||r.redirected){_pollActive=false;await _appendMsg('warn','⚠ Session expirée — polling désactivé.');return;}if(!r.ok)return;const d=await r.json();if(!d.event)return;const evTime=d.event.detected_at||'';if(!evTime||evTime<=_lastSeen)return;_lastSeen=evTime;localStorage.setItem('pe_last_seen',evTime);await _triggerAlert(d.event);}catch(e){}}
+setTimeout(()=>{_poll();setInterval(_poll,30000);},4000);
+})();
+</script>
+
+<!-- ═══ NOTIFICATION BELL LOGIC ═══════════════════════════════════════════ -->
+<script>
+(function NotifBell() {
+  let _open = false;
+  let _userLevel = null;
+  let _notifData = [];
+
+  // Couleur + icône selon type/severity
+  function _iconClass(type, sev) {
+    if (type === 'critical' || sev === 'critical') return 'notif-icon-critical';
+    if (type === 'warning'  || sev === 'high')     return 'notif-icon-warning';
+    return 'notif-icon-info';
+  }
+  function _iconFA(type, sev) {
+    if (type === 'critical' || sev === 'critical') return 'fa-skull-crossbones';
+    if (type === 'warning'  || sev === 'high')     return 'fa-exclamation-triangle';
+    return 'fa-info-circle';
+  }
+  function _sevItemClass(sev) {
+    if (sev === 'critical') return 'sev-critical-item';
+    if (sev === 'high')     return 'sev-high-item';
+    if (sev === 'medium')   return 'sev-medium-item';
+    return 'sev-low-item';
+  }
+
+  // Filtre selon niveau SOC
+  function _filterByLevel(notifs, level) {
+    if (!level) return notifs;
+    if (level === 'L1') {
+      // L1 : uniquement ce qui lui est assigné (pas "all"), ou severity medium/low
+      return notifs.filter(n => n.severity !== 'critical');
+    }
+    if (level === 'L2') {
+      // L2 : tout sauf les notifs purement "info" basses
+      return notifs;
+    }
+    // L3 / Manager : tout
+    return notifs;
+  }
+
+  function _levelLabel(level) {
+    const map = { L1: 'L1 — Junior', L2: 'L2 — Senior', L3: 'L3 — Admin', Manager: 'Manager' };
+    return map[level] || level || '—';
+  }
+
+  function _renderList(notifs) {
+    const el = document.getElementById('notif-list');
+    if (!notifs.length) {
+      el.innerHTML = `<div style="padding:28px;text-align:center;color:var(--muted);font-size:0.75rem;font-family:'JetBrains Mono',monospace;">
+        <i class="fas fa-check-circle" style="font-size:1.4rem;color:var(--green);display:block;margin-bottom:8px;"></i>
+        Aucune nouvelle notification
+      </div>`;
+      return;
+    }
+    el.innerHTML = notifs.map(n => {
+      const ic  = _iconClass(n.type, n.severity);
+      const ifa = _iconFA(n.type, n.severity);
+      const sc  = _sevItemClass(n.severity);
+      const href = n.incident_id ? `/incidents/${n.incident_id}` : '#';
+      const sevBadge = n.severity ? `<span style="font-size:0.58rem;font-weight:700;padding:1px 5px;border-radius:3px;text-transform:uppercase;font-family:'JetBrains Mono',monospace;${
+        n.severity==='critical' ? 'background:rgba(255,71,87,0.12);color:#FF4757;border:1px solid rgba(255,71,87,0.3);' :
+        n.severity==='high'     ? 'background:rgba(255,107,53,0.1);color:#FF6B35;border:1px solid rgba(255,107,53,0.3);' :
+        n.severity==='medium'   ? 'background:rgba(255,215,0,0.1);color:#FFD700;border:1px solid rgba(255,215,0,0.3);' :
+                                   'background:rgba(159,239,0,0.08);color:#9FEF00;border:1px solid rgba(159,239,0,0.3);'
+      }">${n.severity}</span>` : '';
+      return `<a class="notif-item unread ${sc}" href="${href}" onclick="notifMarkOne('${n.id}')">
+        <div class="notif-icon-wrap ${ic}"><i class="fas ${ifa}"></i></div>
+        <div style="flex:1;min-width:0;">
+          <div class="notif-msg">${n.message} ${sevBadge}</div>
+          <div class="notif-ts">${n.ts}</div>
+        </div>
+        ${n.incident_id ? `<i class="fas fa-chevron-right" style="color:var(--muted);font-size:0.6rem;margin-top:6px;flex-shrink:0;"></i>` : ''}
+      </a>`;
+    }).join('');
+  }
+
+  async function _load() {
+    try {
+      const d = await fetch('/api/notifications').then(r => r.json());
+      _notifData = d.notifications || [];
+      const filtered = _filterByLevel(_notifData, _userLevel);
+      const count = filtered.length;
+
+      // Badge topbar + sidebar
+      const badge = document.getElementById('notif-badge');
+      const btn   = document.getElementById('notif-btn');
+      const sidebarBadge = document.getElementById('sidebar-notif-badge');
+      if (count > 0) {
+        const countStr = count > 99 ? '99+' : count;
+        badge.textContent = countStr;
+        badge.style.display = 'block';
+        if (sidebarBadge) { sidebarBadge.textContent = countStr; sidebarBadge.style.display = 'inline-block'; }
+        btn.classList.add('has-notif');
+        // Shake la cloche si critique présent
+        const hasCrit = filtered.some(n => n.type === 'critical' || n.severity === 'critical');
+        if (hasCrit) {
+          btn.classList.add('ringing');
+          setTimeout(() => btn.classList.remove('ringing'), 600);
+        }
+      } else {
+        badge.style.display = 'none';
+        if (sidebarBadge) sidebarBadge.style.display = 'none';
+        btn.classList.remove('has-notif');
+      }
+
+      if (_open) _renderList(filtered);
+    } catch(e) {}
+  }
+
+  // Charge le niveau utilisateur puis lance le polling
+  fetch('/api/current_user').then(r => r.json()).then(u => {
+    if (u.authenticated) {
+      _userLevel = u.level;
+      const tag = document.getElementById('notif-level-tag');
+      if (tag) tag.textContent = _levelLabel(_userLevel);
+    }
+    _load();
+    setInterval(_load, 20000);
+  }).catch(() => { _load(); setInterval(_load, 20000); });
+
+  window.notifToggle = function() {
+    _open ? _close() : _openPanel();
+  };
+
+  function _openPanel() {
+    _open = true;
+    const panel = document.getElementById('notif-panel');
+    panel.style.display = 'block';
+    const filtered = _filterByLevel(_notifData, _userLevel);
+    _renderList(filtered);
+    setTimeout(() => document.addEventListener('click', _outsideClick), 10);
+  }
+
+  function _close() {
+    _open = false;
+    document.getElementById('notif-panel').style.display = 'none';
+    document.removeEventListener('click', _outsideClick);
+  }
+
+  function _outsideClick(e) {
+    const wrapper = document.getElementById('notif-wrapper');
+    if (wrapper && !wrapper.contains(e.target)) _close();
+  }
+
+  window.notifMarkAll = async function() {
+    try {
+      await fetch('/api/notifications/read', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({}) });
+      document.getElementById('notif-badge').style.display = 'none';
+      document.getElementById('notif-btn').classList.remove('has-notif');
+      _notifData = [];
+      _renderList([]);
+    } catch(e) {}
+  };
+
+  window.notifMarkOne = async function(id) {
+    try {
+      await fetch('/api/notifications/read', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ id }) });
+      _notifData = _notifData.filter(n => n.id !== id);
+      const filtered = _filterByLevel(_notifData, _userLevel);
+      const badge = document.getElementById('notif-badge');
+      if (filtered.length > 0) { badge.textContent = filtered.length > 99 ? '99+' : filtered.length; }
+      else { badge.style.display = 'none'; document.getElementById('notif-btn').classList.remove('has-notif'); }
+    } catch(e) {}
+  };
+})();
+</script>
+
+<script>
+/* ── Timezone UTC+1 (Africa/Casablanca) ───────────────────────────────────
+   toLocal(ts)  → "YYYY-MM-DD HH:MM:SS"  en UTC+1
+   toLocalShort(ts) → "MM-DD HH:MM"
+   ─────────────────────────────────────────────────────────────────────── */
+function toLocal(ts) {
+  if (!ts) return '—';
+  try {
+    const d = new Date(ts);
+    if (isNaN(d)) return String(ts).replace('T',' ').slice(0,19);
+    d.setTime(d.getTime() + 60*60*1000); // +1h
+    return d.toISOString().replace('T',' ').slice(0,19);
+  } catch(e) { return String(ts).replace('T',' ').slice(0,19); }
+}
+function toLocalShort(ts) {
+  const s = toLocal(ts);
+  return s === '—' ? '—' : s.slice(5,16);
+}
+</script>
+
+</body>
+</html>

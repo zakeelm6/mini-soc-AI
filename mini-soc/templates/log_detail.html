@@ -1,0 +1,394 @@
+{% extends "base.html" %}
+{% block title %}Log — {{ log.get('@timestamp','')[:19] }}{% endblock %}
+{% block content %}
+
+{% set sev = log.get('severity','info') %}
+{% set sev_color = 'var(--red)' if sev=='critical' else 'var(--orange)' if sev=='high' else 'var(--yellow)' if sev=='medium' else 'var(--blue)' if sev=='low' else 'var(--muted)' %}
+
+<style>
+  .detail-label { font-size:0.68rem; text-transform:uppercase; letter-spacing:1px; color:var(--muted); margin-bottom:3px; }
+  .detail-val   { font-size:0.88rem; color:var(--text); }
+  .raw-field    { background:var(--bg3); border-radius:6px; padding:8px 12px; font-family:monospace; font-size:0.75rem; color:var(--text); border:1px solid var(--border); word-break:break-all; }
+  .form-ctrl    { background:var(--bg3); border:1px solid var(--border); color:var(--text); border-radius:6px; padding:6px 10px; font-size:0.82rem; width:100%; }
+  .form-ctrl:focus { outline:none; border-color:var(--blue); }
+  .modal-overlay { display:none; position:fixed; inset:0; background:rgba(0,0,0,0.7); z-index:1000; align-items:center; justify-content:center; }
+  .modal-overlay.open { display:flex; }
+  .modal-box { background:var(--bg2); border:1px solid var(--border); border-radius:12px; padding:28px; width:520px; max-width:95vw; max-height:90vh; overflow-y:auto; }
+</style>
+
+<!-- Breadcrumb -->
+<div style="font-size:0.78rem; color:var(--muted); margin-bottom:12px;">
+  <a href="/logs" style="color:var(--blue); text-decoration:none;"><i class="fas fa-file-alt me-1"></i>Logs</a>
+  <span class="mx-2">›</span>
+  <span style="font-family:monospace; color:var(--text); font-size:0.75rem;">{{ log._index }} / {{ log._id[:12] }}…</span>
+</div>
+
+<!-- Header card -->
+<div style="background:var(--bg2); border:1px solid var(--border); border-radius:10px; border-left:4px solid {{ sev_color }}; padding:18px 24px; margin-bottom:20px;">
+  <div class="d-flex align-items-flex-start justify-content-between flex-wrap gap-3">
+    <div style="flex:1; min-width:240px;">
+      <div class="d-flex align-items-center gap-2 flex-wrap mb-2">
+        <span class="badge-sev sev-{{ sev }}">{{ sev|upper }}</span>
+        <span class="type-mono" style="font-size:0.78rem;">{{ log.get('log_type','?') }}</span>
+        {% set tags = log.get('tags',[]) %}
+        {% if tags is string %}{% set tags = [tags] %}{% endif %}
+        {% for t in tags %}{% if t and t != 'beats_input_codec_plain_applied' %}
+          <span style="background:rgba(88,166,255,0.1); color:var(--blue); border:1px solid rgba(88,166,255,0.3); border-radius:10px; font-size:0.65rem; padding:2px 8px;">{{ t }}</span>
+        {% endif %}{% endfor %}
+      </div>
+      <div style="font-family:monospace; font-size:0.72rem; color:var(--muted); margin-bottom:8px;">
+        {{ log.get('@timestamp','')|local_ts('%Y-%m-%d %H:%M:%S') }}
+        {% if log.get('src_ip') %}· <span style="color:var(--red);">{{ log.get('src_ip') }}</span>{% endif %}
+        {% if log.get('hostname') %}· {{ log.get('hostname') }}{% endif %}
+      </div>
+      {% if log.get('message') %}
+      <div class="raw-field">{{ log.get('message','') }}</div>
+      {% endif %}
+    </div>
+    <!-- Actions -->
+    <div class="d-flex flex-column gap-2" style="min-width:160px;">
+      {% if current_user and current_user.level in ('L2','L3') %}
+      <button onclick="openCreateIncident()" class="btn-soc btn-soc-danger" style="justify-content:center;">
+        <i class="fas fa-plus me-1"></i>Créer incident
+      </button>
+      {% endif %}
+      {% if log.get('src_ip') %}
+      <a href="/logs?src_ip={{ log.get('src_ip') }}" class="btn-soc" style="justify-content:center; text-align:center;">
+        <i class="fas fa-search me-1"></i>Filtrer IP
+      </a>
+      {% endif %}
+      <a href="/logs" class="btn-soc" style="justify-content:center; text-align:center;">
+        <i class="fas fa-arrow-left me-1"></i>Retour
+      </a>
+    </div>
+  </div>
+</div>
+
+<!-- Alert for high/critical severity -->
+{% if sev in ('critical','high') %}
+<div style="background:rgba(248,81,73,0.08); border:1px solid rgba(248,81,73,0.3); border-radius:10px; padding:12px 18px; margin-bottom:16px;">
+  <div style="font-size:0.82rem; font-weight:700; color:var(--red); margin-bottom:4px;">
+    <i class="fas fa-exclamation-triangle me-2"></i>Événement de sévérité {{ sev|upper }} — Action recommandée
+  </div>
+  <div style="font-size:0.75rem; color:var(--muted); line-height:1.5;">
+    {% if sev == 'critical' %}
+      Cet événement est classé CRITIQUE. Vérifiez immédiatement s'il existe un incident ouvert pour cette IP.
+      Si ce n'est pas le cas, créez un incident et lancez une analyse Ollama.
+    {% else %}
+      Cet événement est de sévérité HIGH. Corrélation avec d'autres événements recommandée avant escalade.
+    {% endif %}
+  </div>
+</div>
+{% endif %}
+
+<div class="row g-3">
+  <!-- Left column: all fields -->
+  <div class="col-md-7">
+    <div class="card-section mb-3">
+      <div class="section-title"><i class="fas fa-list me-1"></i>Champs du log</div>
+      <div class="row g-2" style="font-size:0.82rem;">
+        {% set skip_fields = ['message', '_id', '_index'] %}
+        {% for key, val in log.items() %}
+        {% if key not in skip_fields and val %}
+        <div class="col-12">
+          <div style="display:flex; gap:10px; align-items:flex-start; border-bottom:1px solid var(--border); padding:5px 0;">
+            <div style="min-width:120px; font-size:0.68rem; color:var(--muted); text-transform:uppercase; letter-spacing:0.5px; padding-top:2px; flex-shrink:0;">{{ key }}</div>
+            <div style="font-family:monospace; font-size:0.75rem; color:var(--text); word-break:break-all; flex:1;">
+              {% if val is iterable and val is not string %}
+                {{ val | join(', ') }}
+              {% else %}
+                {{ val }}
+              {% endif %}
+            </div>
+          </div>
+        </div>
+        {% endif %}
+        {% endfor %}
+      </div>
+    </div>
+
+    <!-- Related logs -->
+    {% if related_logs %}
+    <div class="card-section">
+      <div class="section-title"><i class="fas fa-layer-group me-1"></i>Logs récents — même IP (24h) <span style="font-size:0.72rem; color:var(--muted); font-weight:400;">{{ related_logs|length }} entrées</span></div>
+      <div style="overflow-x:auto;">
+        <table class="table soc-table mb-0" style="font-size:0.75rem;">
+          <thead>
+            <tr>
+              <th>Timestamp</th>
+              <th>Type</th>
+              <th>Sév.</th>
+              <th>Message</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody>
+          {% for rl in related_logs %}
+          {% set rls = rl.get('severity','info') %}
+          <tr>
+            <td style="white-space:nowrap; color:var(--muted); font-size:0.70rem;">{{ rl.get('@timestamp','')|local_ts('%Y-%m-%d %H:%M:%S') }}</td>
+            <td><span class="type-mono" style="font-size:0.68rem;">{{ rl.get('log_type','—') }}</span></td>
+            <td><span class="badge-sev sev-{{ rls }}" style="font-size:0.60rem;">{{ rls }}</span></td>
+            <td style="max-width:220px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">
+              <code style="font-size:0.68rem; color:var(--muted);">{{ (rl.get('message','') or '')[:100] }}</code>
+            </td>
+            <td>
+              <a href="/logs/{{ rl._index }}/{{ rl._id }}" class="btn-soc" style="padding:2px 6px; font-size:0.60rem;">
+                <i class="fas fa-external-link-alt"></i>
+              </a>
+            </td>
+          </tr>
+          {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+    {% endif %}
+  </div>
+
+  <!-- Right column: related incidents + SOC actions -->
+  <div class="col-md-5">
+    <!-- Related active incidents -->
+    <div class="card-section mb-3" style="border-left:3px solid var(--orange);">
+      <div class="section-title"><i class="fas fa-shield-alt me-1" style="color:var(--orange);"></i>Incidents actifs liés</div>
+      {% if related_incidents %}
+      <div style="display:flex; flex-direction:column; gap:6px;">
+      {% for ri in related_incidents %}
+      {% set rs = ri.get('severity','medium') %}
+      <a href="/incidents/{{ ri.id }}" style="text-decoration:none;">
+        <div style="background:var(--bg3); border:1px solid var(--border); border-radius:8px; padding:10px 12px;">
+          <div class="d-flex align-items-center gap-2 mb-1">
+            <span class="badge-sev sev-{{ rs }}" style="font-size:0.60rem;">{{ rs }}</span>
+            <span style="font-family:monospace; font-size:0.65rem; color:var(--muted);">{{ ri.get('incident_id', ri.id[:8]|upper) }}</span>
+            {% if ri.get('verdict') == 'true_positive' %}
+              <span style="color:var(--green); font-size:0.65rem; margin-left:auto;"><i class="fas fa-check-circle"></i> TP</span>
+            {% elif ri.get('verdict') == 'false_positive' %}
+              <span style="color:var(--red); font-size:0.65rem; margin-left:auto;"><i class="fas fa-times-circle"></i> FP</span>
+            {% endif %}
+          </div>
+          <div style="font-size:0.78rem; color:var(--text);">{{ ri.get('title','?') }}</div>
+          <div style="font-size:0.68rem; color:var(--muted); margin-top:3px;">
+            {{ ri.get('assigned_to','None') }} · {{ ri.get('created_at','')[:10] }}
+          </div>
+        </div>
+      </a>
+      {% endfor %}
+      </div>
+      {% else %}
+      <div style="text-align:center; padding:20px; color:var(--muted); font-size:0.78rem;">
+        <i class="fas fa-shield-alt" style="font-size:1.5rem; color:var(--green); display:block; margin-bottom:8px;"></i>
+        Aucun incident actif pour cette IP
+      </div>
+      {% endif %}
+      {% if log.get('src_ip') %}
+      <a href="/incidents?src_ip={{ log.get('src_ip') }}" class="btn-soc w-100 mt-2" style="justify-content:center; font-size:0.75rem;">
+        <i class="fas fa-search me-1"></i>Voir tous les incidents IP {{ log.get('src_ip') }}
+      </a>
+      {% endif %}
+    </div>
+
+    <!-- SOC Analyst workspace -->
+    <div class="card-section" style="border-left:3px solid var(--purple);">
+      <div class="section-title"><i class="fas fa-brain me-1" style="color:var(--purple);"></i>Espace analyste SOC</div>
+
+      <!-- Quick analysis -->
+      <div style="background:var(--bg3); border-radius:8px; padding:12px; margin-bottom:10px;">
+        <div style="font-size:0.72rem; color:var(--purple); font-weight:600; margin-bottom:8px;">
+          <i class="fas fa-bolt me-1"></i>Évaluation rapide
+        </div>
+        <div id="quick-eval" style="font-size:0.78rem; color:var(--muted);">
+          <!-- Filled by JS -->
+          <i class="fas fa-circle-notch fa-spin me-1"></i>Analyse…
+        </div>
+      </div>
+
+      <!-- Action buttons -->
+      {% if current_user and current_user.level in ('L2','L3') %}
+      <div style="font-size:0.72rem; color:var(--muted); font-weight:600; margin-bottom:6px; text-transform:uppercase; letter-spacing:1px;">Actions</div>
+      <div class="d-flex flex-column gap-2">
+        <button onclick="openCreateIncident()" class="btn-soc btn-soc-danger" style="justify-content:center;">
+          <i class="fas fa-plus me-1"></i>Créer un incident depuis ce log
+        </button>
+        <button onclick="runOllamaAnalysis()" class="btn-soc" style="justify-content:center; border-color:var(--purple); color:var(--purple);">
+          <i class="fas fa-brain me-1"></i>Analyser avec Ollama
+        </button>
+      </div>
+
+      <!-- Ollama analysis result -->
+      <div id="ollama-result" style="display:none; margin-top:10px; background:var(--bg3); border-radius:8px; padding:12px; border:1px solid rgba(210,168,255,0.3);">
+        <div style="font-size:0.65rem; text-transform:uppercase; letter-spacing:1px; color:var(--purple); margin-bottom:6px;">
+          <i class="fas fa-brain me-1"></i>Analyse Ollama
+        </div>
+        <div id="ollama-content" style="font-size:0.78rem; color:var(--muted);"></div>
+      </div>
+      {% else %}
+      <div style="font-size:0.78rem; color:var(--muted); text-align:center; padding:10px;">
+        <i class="fas fa-lock me-1"></i>Niveau L2+ requis pour les actions
+      </div>
+      {% endif %}
+    </div>
+  </div>
+</div>
+
+<!-- Modal: Create Incident from Log -->
+{% if current_user and current_user.level in ('L2','L3') %}
+<div class="modal-overlay" id="modalCreate">
+  <div class="modal-box">
+    <div class="d-flex justify-content-between align-items-center mb-3">
+      <h6 style="color:var(--red); margin:0;"><i class="fas fa-plus me-2"></i>Créer un incident depuis ce log</h6>
+      <button onclick="document.getElementById('modalCreate').classList.remove('open')" style="background:none;border:none;color:var(--muted);font-size:1.2rem;cursor:pointer;">×</button>
+    </div>
+    <form method="POST" action="/incidents/new">
+      <div class="mb-2">
+        <label style="font-size:0.75rem; color:var(--muted);">Titre *</label>
+        <input type="text" name="title" class="form-ctrl mt-1" required
+               value="[{{ log.get('log_type','Log') }}] {{ log.get('severity','?')|upper }} — {{ log.get('src_ip','') }}">
+      </div>
+      <div class="row g-2 mb-2">
+        <div class="col-6">
+          <label style="font-size:0.75rem; color:var(--muted);">Sévérité</label>
+          <select name="severity" class="form-ctrl mt-1">
+            {% for sv in ['critical','high','medium','low'] %}
+            <option value="{{ sv }}" {% if sv == sev %}selected{% endif %}>{{ sv|capitalize }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="col-6">
+          <label style="font-size:0.75rem; color:var(--muted);">Type</label>
+          <select name="itype" class="form-ctrl mt-1">
+            {% set type_map = {'auth':'brute_force','apache_access':'web_attack','suricata':'ids_alert','syslog':'anomaly_ia'} %}
+            <option value="{{ type_map.get(log.get('log_type','autre'),'autre') }}" selected>
+              {{ type_map.get(log.get('log_type','autre'),'autre') }}
+            </option>
+            <option value="brute_force">Brute Force SSH</option>
+            <option value="web_attack">Web Attack</option>
+            <option value="ids_alert">IDS Alert</option>
+            <option value="anomaly_ia">IA Anomaly</option>
+            <option value="scan">Network Scan</option>
+            <option value="autre">Other</option>
+          </select>
+        </div>
+      </div>
+      <div class="mb-2">
+        <label style="font-size:0.75rem; color:var(--muted);">IP source</label>
+        <input type="text" name="src_ip" class="form-ctrl mt-1" value="{{ log.get('src_ip','') }}">
+      </div>
+      <div class="mb-3">
+        <label style="font-size:0.75rem; color:var(--muted);">Description</label>
+        <textarea name="description" rows="4" class="form-ctrl mt-1">Log ID: {{ log._id }}
+Index: {{ log._index }}
+Timestamp: {{ log.get('@timestamp','')[:19] }}
+Type: {{ log.get('log_type','?') }}
+SSH user: {{ log.get('ssh_user','—') }}
+Tags: {{ log.get('tags',[])|join(', ') if log.get('tags') is iterable and log.get('tags') is not string else log.get('tags','—') }}
+Message: {{ (log.get('message','') or '')[:300] }}</textarea>
+      </div>
+      <div class="d-flex gap-2 justify-content-end">
+        <button type="button" onclick="document.getElementById('modalCreate').classList.remove('open')" class="btn-soc">Annuler</button>
+        <button type="submit" class="btn-soc btn-soc-danger">
+          <i class="fas fa-plus me-1"></i>Créer l'incident
+        </button>
+      </div>
+    </form>
+  </div>
+</div>
+{% endif %}
+
+<script>
+const LOG_DATA = {
+  ip:       "{{ log.get('src_ip','') }}",
+  logType:  "{{ log.get('log_type','?') }}",
+  severity: "{{ sev }}",
+  timestamp:"{{ log.get('@timestamp','')[:19] }}",
+  message:  {{ (log.get('message','') or '')[:200] | tojson }},
+  tags:     {{ (log.get('tags',[]) if log.get('tags') is not string else [log.get('tags','')]) | tojson }},
+  sshUser:  "{{ log.get('ssh_user','') }}",
+};
+
+function openCreateIncident() {
+  document.getElementById('modalCreate').classList.add('open');
+}
+
+// Quick evaluation based on log fields
+function buildQuickEval() {
+  const panel = document.getElementById('quick-eval');
+  const sev = LOG_DATA.severity;
+  const tags = LOG_DATA.tags || [];
+  const isSshFail   = tags.includes('ssh_failed') || tags.includes('auth_failure');
+  const isHttpError = tags.includes('http_error');
+  const isIds       = tags.includes('ids_alert');
+
+  let signals = [];
+  if (sev === 'critical') signals.push('<span style="color:var(--red);font-weight:600;">Sévérité CRITIQUE</span>');
+  else if (sev === 'high') signals.push('<span style="color:var(--orange);font-weight:600;">Sévérité HIGH</span>');
+  if (isSshFail)   signals.push('<span style="color:var(--red);">Échec auth SSH</span>');
+  if (isHttpError) signals.push('<span style="color:var(--orange);">Erreur HTTP détectée</span>');
+  if (isIds)       signals.push('<span style="color:var(--purple);">Alerte IDS Suricata</span>');
+  if (LOG_DATA.sshUser) signals.push(`Utilisateur cible: <code style="font-size:0.72rem;">${LOG_DATA.sshUser}</code>`);
+
+  const riskColor = sev === 'critical' ? 'var(--red)' : sev === 'high' ? 'var(--orange)'
+                  : sev === 'medium' ? 'var(--yellow)' : 'var(--green)';
+
+  panel.innerHTML = signals.length
+    ? `<div style="display:flex;flex-direction:column;gap:4px;">${signals.map(s => `<div>· ${s}</div>`).join('')}</div>
+       <div style="margin-top:8px;font-size:0.7rem;color:var(--muted);">
+         <i class="fas fa-circle" style="color:${riskColor};font-size:0.5rem;"></i>
+         ${sev === 'critical' || sev === 'high' ? 'Incident recommandé' : 'Surveillance recommandée'}
+       </div>`
+    : `<span style="color:var(--muted);">Aucun signal d'alerte notable détecté.</span>`;
+}
+
+async function runOllamaAnalysis() {
+  const resultDiv = document.getElementById('ollama-result');
+  const contentDiv = document.getElementById('ollama-content');
+  resultDiv.style.display = 'block';
+  contentDiv.innerHTML = '<i class="fas fa-circle-notch fa-spin me-1"></i>Interrogation d\'Ollama…';
+
+  // We create a temp incident-like payload and call the analysis API
+  // Since we can't directly analyze a log without an incident, we show a summary
+  const summary = `IP: ${LOG_DATA.ip} | Type: ${LOG_DATA.logType} | Sév: ${LOG_DATA.severity}
+Tags: ${LOG_DATA.tags.join(', ')} | User: ${LOG_DATA.sshUser || '—'}
+Message: ${LOG_DATA.message}`;
+
+  // If there's a related incident, we can use its analysis
+  {% if related_incidents %}
+  const firstInc = "{{ related_incidents[0].id if related_incidents else '' }}";
+  if (firstInc) {
+    try {
+      const d = await fetch('/api/incidents/' + firstInc + '/analysis').then(r => r.json());
+      if (d.status === 'ready' && d.analysis) {
+        const a = d.analysis;
+        contentDiv.innerHTML = `
+          <div style="font-size:0.72rem;color:var(--muted);margin-bottom:4px;">
+            Basé sur l'incident lié <code style="font-size:0.68rem;">{{ related_incidents[0].get('incident_id', related_incidents[0].id[:8]|upper) if related_incidents else '' }}</code>
+          </div>
+          <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:6px;">
+            <span style="background:rgba(0,0,0,0.3);border-radius:6px;padding:4px 10px;font-size:0.72rem;font-weight:600;color:${a.verdict==='true_positive'?'var(--red)':a.verdict==='false_positive'?'var(--green)':'var(--yellow)'};">
+              ${a.verdict==='true_positive'?'VRAI POSITIF':a.verdict==='false_positive'?'FAUX POSITIF':'INCERTAIN'}
+            </span>
+            ${a.confidence?`<span style="font-size:0.72rem;color:var(--muted);">Conf: ${(a.confidence*100).toFixed(0)}%</span>`:''}
+          </div>
+          ${a.summary?`<div style="font-size:0.75rem;color:var(--muted);line-height:1.5;">${a.summary}</div>`:''}
+        `;
+        return;
+      }
+    } catch(e) {}
+  }
+  {% endif %}
+
+  contentDiv.innerHTML = `
+    <div style="color:var(--muted);font-size:0.75rem;line-height:1.5;">
+      <div style="margin-bottom:6px;">Récapitulatif de l'événement :</div>
+      <div class="raw-field" style="font-size:0.68rem;">${summary}</div>
+      <div style="margin-top:8px;color:var(--orange);">
+        <i class="fas fa-info-circle me-1"></i>Pour une analyse Ollama complète, créez un incident depuis ce log.
+        Ollama analysera automatiquement l'incident après création.
+      </div>
+    </div>
+  `;
+}
+
+buildQuickEval();
+</script>
+
+{% endblock %}

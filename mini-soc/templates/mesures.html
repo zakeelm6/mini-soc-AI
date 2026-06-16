@@ -1,0 +1,361 @@
+{% extends "base.html" %}
+{% block title %}Mesures de remédiation{% endblock %}
+{% block content %}
+
+<div class="d-flex align-items-center justify-content-between mb-3 flex-wrap gap-2">
+  <div>
+    <div style="font-size:1.1rem; font-weight:600;">
+      <i class="fas fa-shield-alt me-2" style="color:var(--green);"></i>Mesures de remédiation
+    </div>
+    <div style="font-size:0.78rem; color:var(--muted);" id="gen-time">Basé sur les incidents des 24 dernières heures</div>
+  </div>
+  <div class="d-flex gap-2 flex-wrap">
+    <div class="stat-card" style="min-width:90px; padding:8px 14px;">
+      <div class="number" style="color:var(--red); font-size:1.5rem;" id="cnt-critical">—</div>
+      <div class="label">Critiques</div>
+    </div>
+    <div class="stat-card" style="min-width:90px; padding:8px 14px;">
+      <div class="number" style="color:var(--orange); font-size:1.5rem;" id="cnt-high">—</div>
+      <div class="label">Hautes</div>
+    </div>
+    <div class="stat-card" style="min-width:90px; padding:8px 14px;">
+      <div class="number" style="color:var(--blue); font-size:1.5rem;" id="cnt-types">—</div>
+      <div class="label">Types d'attaque</div>
+    </div>
+    <button onclick="loadMesures()" class="btn-soc btn-soc-primary" style="height:fit-content; align-self:center;">
+      <i class="fas fa-sync-alt me-1"></i>Actualiser
+    </button>
+  </div>
+</div>
+
+<!-- ══ SOAR — Blocage d'IP ══════════════════════════════════════════════════ -->
+<div class="card-section mb-3" style="border-left:4px solid var(--red);">
+  <div class="d-flex align-items-center justify-content-between mb-3 flex-wrap gap-2">
+    <div>
+      <div class="section-title mb-0" style="border:none;padding:0;">
+        <i class="fas fa-ban me-1" style="color:var(--red);"></i>SOAR — Blocage d'IP
+      </div>
+      <div style="font-size:0.72rem;color:var(--muted);margin-top:2px;">Appliquer / retirer une règle iptables DROP · <span style="color:var(--orange);">L2+ bloquer</span> · <span style="color:var(--red);">L3 débloquer</span></div>
+    </div>
+    <div id="blocked-count-badge" style="background:rgba(255,71,87,0.1);border:1px solid rgba(255,71,87,0.3);border-radius:8px;padding:4px 14px;font-size:0.8rem;font-weight:700;color:var(--red);">0 IPs bloquées</div>
+  </div>
+
+  <!-- Formulaire blocage manuel -->
+  <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px;align-items:flex-end;">
+    <div style="flex:1;min-width:160px;">
+      <label style="font-size:0.68rem;color:var(--muted);display:block;margin-bottom:3px;text-transform:uppercase;letter-spacing:1px;">IP à bloquer</label>
+      <input id="soar-ip-input" class="form-control" placeholder="ex: 192.168.1.100" style="font-family:'JetBrains Mono',monospace;font-size:0.82rem;">
+    </div>
+    <div style="flex:2;min-width:200px;">
+      <label style="font-size:0.68rem;color:var(--muted);display:block;margin-bottom:3px;text-transform:uppercase;letter-spacing:1px;">Raison</label>
+      <input id="soar-reason-input" class="form-control" placeholder="ex: Brute force SSH détecté manuellement" style="font-size:0.8rem;">
+    </div>
+    <button onclick="soarBlockIP()" class="btn-soc btn-soc-danger" style="height:38px;flex-shrink:0;">
+      <i class="fas fa-ban me-1"></i>Bloquer
+    </button>
+    <button onclick="loadBlockedIPs()" class="btn-soc" style="height:38px;flex-shrink:0;">
+      <i class="fas fa-sync-alt"></i>
+    </button>
+  </div>
+
+  <div id="soar-msg" style="display:none;margin-bottom:10px;font-size:0.78rem;padding:7px 12px;border-radius:6px;"></div>
+
+  <!-- Tableau des IPs bloquées -->
+  <div style="overflow:hidden;border-radius:6px;border:1px solid var(--border);">
+    <table class="table soc-table mb-0" style="font-size:0.76rem;">
+      <thead>
+        <tr>
+          <th>IP bloquée</th>
+          <th>Bloquée par</th>
+          <th>Raison / Incident</th>
+          <th>Méthode</th>
+          <th>Date</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody id="blocked-ips-tbody">
+        <tr><td colspan="6" class="empty-state">Chargement…</td></tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<!-- Alerte post-exploitation -->
+<div id="postexploit-banner" style="display:none;" class="card-section mb-3"
+     style="border-left:4px solid var(--red); background:rgba(248,81,73,0.08);">
+  <div class="d-flex align-items-center gap-3">
+    <i class="fas fa-skull-crossbones fa-2x" style="color:var(--red);"></i>
+    <div>
+      <div style="font-size:1rem; font-weight:700; color:var(--red);">
+        ALERTE CRITIQUE — Connexion SSH réussie depuis un attaquant connu
+      </div>
+      <div style="font-size:0.85rem; color:var(--muted);">
+        Une connexion "Accepted password" a été détectée depuis une IP ayant effectué du brute force.
+        L'attaquant est probablement <strong>à l'intérieur du système</strong>. Isolation immédiate requise.
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Pas d'attaques -->
+<div id="no-attacks" style="display:none;">
+  <div class="card-section text-center py-4">
+    <i class="fas fa-check-circle fa-3x mb-3" style="color:var(--green); display:block;"></i>
+    <div style="color:var(--green); font-size:1rem; font-weight:600;">Aucune attaque active détectée</div>
+    <div style="color:var(--muted); font-size:0.85rem; margin-top:4px;">
+      Pas d'incident dans les dernières 24h. Le système semble sain.
+    </div>
+  </div>
+</div>
+
+<!-- Cartes d'attaque + mesures -->
+<div id="attacks-container"></div>
+
+<script>
+// ── SOAR ──────────────────────────────────────────────────────────────────────
+
+function soarMsg(text, type) {
+  const el = document.getElementById('soar-msg');
+  el.style.display = 'block';
+  el.style.background = type === 'ok' ? 'rgba(159,239,0,0.08)' : 'rgba(255,71,87,0.08)';
+  el.style.border = `1px solid ${type === 'ok' ? 'rgba(159,239,0,0.3)' : 'rgba(255,71,87,0.3)'}`;
+  el.style.color = type === 'ok' ? 'var(--green)' : 'var(--red)';
+  el.innerHTML = `<i class="fas fa-${type === 'ok' ? 'check-circle' : 'exclamation-triangle'} me-1"></i>${text}`;
+  setTimeout(() => { el.style.display = 'none'; }, 5000);
+}
+
+async function loadBlockedIPs() {
+  const tbody = document.getElementById('blocked-ips-tbody');
+  try {
+    const d = await fetch('/api/blocked_ips').then(r => r.json());
+    const ips = d.ips || [];
+    document.getElementById('blocked-count-badge').textContent = `${ips.length} IP${ips.length !== 1 ? 's' : ''} bloquée${ips.length !== 1 ? 's' : ''}`;
+    if (!ips.length) {
+      tbody.innerHTML = '<tr><td colspan="6" class="empty-state" style="color:var(--green);"><i class="fas fa-check-circle me-1"></i>Aucune IP bloquée</td></tr>';
+      return;
+    }
+    tbody.innerHTML = ips.map(ip => {
+      const dt = toLocalShort(ip['@timestamp']);
+      const method = ip.method || 'iptables_DROP';
+      const manual = method.includes('manual');
+      const reason = ip.reason || (ip.incident_id ? `Incident #${ip.incident_id.slice(0,8)}` : '—');
+      return `<tr>
+        <td><code style="color:var(--red);font-size:0.8rem;font-family:'JetBrains Mono',monospace;">${esc(ip.ip)}</code></td>
+        <td style="color:var(--muted);font-size:0.73rem;">${esc(ip.blocked_by || '—')}</td>
+        <td style="font-size:0.73rem;max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${esc(reason)}">${esc(reason)}</td>
+        <td><span style="font-size:0.68rem;font-family:'JetBrains Mono',monospace;color:${manual ? 'var(--orange)' : 'var(--cyan)'};">${manual ? 'Manuel' : 'Incident'}</span></td>
+        <td style="font-size:0.7rem;color:var(--muted);">${dt}</td>
+        <td>
+          <button onclick="soarUnblockIP('${esc(ip.ip)}', this)" class="btn-soc btn-soc-danger" style="font-size:0.68rem;padding:3px 10px;">
+            <i class="fas fa-unlock me-1"></i>Débloquer
+          </button>
+        </td>
+      </tr>`;
+    }).join('');
+  } catch(e) {
+    tbody.innerHTML = `<tr><td colspan="6" style="color:var(--red);padding:16px;">${e.message}</td></tr>`;
+  }
+}
+
+async function soarBlockIP() {
+  const ip = document.getElementById('soar-ip-input').value.trim();
+  const reason = document.getElementById('soar-reason-input').value.trim() || 'Blocage manuel';
+  if (!ip) { soarMsg('Saisissez une adresse IP', 'err'); return; }
+  try {
+    const r = await fetch('/api/soar/block_ip', {
+      method: 'POST', headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({ ip, reason })
+    }).then(r => r.json());
+    if (r.error) { soarMsg(r.error, 'err'); return; }
+    soarMsg(r.message, 'ok');
+    document.getElementById('soar-ip-input').value = '';
+    document.getElementById('soar-reason-input').value = '';
+    loadBlockedIPs();
+  } catch(e) { soarMsg('Erreur réseau : ' + e.message, 'err'); }
+}
+
+async function soarUnblockIP(ip, btn) {
+  if (!confirm(`Débloquer l'IP ${ip} ?`)) return;
+  btn.disabled = true;
+  btn.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>…';
+  try {
+    const r = await fetch('/api/mitigate_unblock', {
+      method: 'POST', headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({ ip })
+    }).then(r => r.json());
+    if (r.status === 'ok' || r.status === 'not_found') {
+      soarMsg(`IP ${ip} débloquée`, 'ok');
+      loadBlockedIPs();
+    } else {
+      soarMsg(r.error || 'Erreur lors du déblocage', 'err');
+      btn.disabled = false;
+      btn.innerHTML = '<i class="fas fa-unlock me-1"></i>Débloquer';
+    }
+  } catch(e) {
+    soarMsg('Erreur réseau : ' + e.message, 'err');
+    btn.disabled = false;
+    btn.innerHTML = '<i class="fas fa-unlock me-1"></i>Débloquer';
+  }
+}
+
+// ── MESURES ───────────────────────────────────────────────────────────────────
+const PRIO_COLORS = { critique: "var(--red)", haute: "var(--orange)", moyenne: "var(--yellow)" };
+const PRIO_LABELS = { critique: "CRITIQUE", haute: "HAUTE", moyenne: "MOYENNE" };
+
+function esc(s) {
+  return String(s||"").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;");
+}
+
+async function loadMesures() {
+  try {
+    const d = await fetch("/api/mesures").then(r => r.json());
+
+    document.getElementById("cnt-critical").textContent = d.total_critical || 0;
+    document.getElementById("cnt-high").textContent     = d.total_high || 0;
+    document.getElementById("cnt-types").textContent    = d.total_types || 0;
+    document.getElementById("gen-time").textContent     =
+      "Mis à jour : " + (d.generated_at || "").slice(0,19).replace("T"," ") + " UTC";
+
+    // Banner post-exploit
+    document.getElementById("postexploit-banner").style.display = d.post_exploit ? "flex" : "none";
+
+    const attacks = d.attacks || [];
+    if (!attacks.length) {
+      document.getElementById("no-attacks").style.display = "block";
+      document.getElementById("attacks-container").innerHTML = "";
+      return;
+    }
+    document.getElementById("no-attacks").style.display = "none";
+
+    let html = "";
+    for (const a of attacks) {
+      const prioColor = PRIO_COLORS[a.priority] || "var(--muted)";
+      const prioLabel = PRIO_LABELS[a.priority] || a.priority.toUpperCase();
+      const ipsBadges = (a.ips||[]).map(ip =>
+        `<span style="background:rgba(88,166,255,0.12);color:var(--blue);font-family:monospace;font-size:0.78rem;padding:2px 8px;border-radius:4px;">${esc(ip)}</span>`
+      ).join(" ");
+
+      const measuresList = (a.measures||[]).map((m,i) =>
+        `<li class="measure-item" style="padding:6px 0; border-bottom:1px solid var(--border);">
+          <span style="color:${prioColor}; font-weight:600; margin-right:6px;">${i+1}.</span>
+          ${esc(m)}
+        </li>`
+      ).join("");
+
+      const cmdList = (a.commands||[]).map(c =>
+        c.startsWith("#") ?
+          `<div style="color:var(--muted);font-size:0.75rem;margin-top:6px;">${esc(c)}</div>` :
+          `<div class="cmd-block" onclick="copyCmd(this)" title="Cliquer pour copier">
+            <i class="fas fa-copy" style="color:var(--muted);margin-right:6px;font-size:0.75rem;"></i>
+            <code style="font-size:0.82rem;">${esc(c)}</code>
+          </div>`
+      ).join("");
+
+      const scoreBar = Math.round((a.max_score||0) * 100);
+      const scoreColor = a.max_score >= 0.7 ? "var(--red)" : a.max_score >= 0.4 ? "var(--orange)" : "var(--yellow)";
+
+      html += `
+      <div class="card-section mb-3" style="border-left:4px solid ${prioColor};">
+        <!-- Header -->
+        <div class="d-flex align-items-start justify-content-between flex-wrap gap-2 mb-3">
+          <div class="d-flex align-items-center gap-3">
+            <div style="background:${prioColor}22;border-radius:10px;width:48px;height:48px;display:flex;align-items:center;justify-content:center;">
+              <i class="fas ${esc(a.icon)}" style="color:${prioColor};font-size:1.4rem;"></i>
+            </div>
+            <div>
+              <div style="font-size:1rem;font-weight:700;">${esc(a.title)}</div>
+              <div style="font-size:0.75rem;color:var(--muted);">
+                ${a.count} incident${a.count>1?"s":""}
+                · Dernier: ${(a.last_seen||"").slice(0,16).replace("T"," ")} UTC
+              </div>
+            </div>
+          </div>
+          <div class="d-flex align-items-center gap-2 flex-wrap">
+            <span style="background:${prioColor}22;color:${prioColor};font-size:0.72rem;font-weight:700;
+                         padding:3px 10px;border-radius:12px;letter-spacing:1px;">
+              ${prioLabel}
+            </span>
+            <span class="badge-sev sev-${esc(a.severity)}">${(a.severity||"").toUpperCase()}</span>
+          </div>
+        </div>
+
+        <!-- IPs concernées + score -->
+        ${ipsBadges ? `
+        <div class="d-flex align-items-center gap-2 mb-3 flex-wrap">
+          <span style="font-size:0.75rem;color:var(--muted);">IPs impliquées:</span>
+          ${ipsBadges}
+          <div style="margin-left:auto;text-align:right;">
+            <div style="font-size:0.7rem;color:var(--muted);">Score max</div>
+            <div style="font-size:1.1rem;font-weight:700;color:${scoreColor};">${(a.max_score*10).toFixed(1)}/10</div>
+          </div>
+        </div>
+        <div style="background:var(--bg-card);border-radius:4px;height:6px;margin-bottom:16px;border:1px solid var(--border);">
+          <div style="height:100%;width:${scoreBar}%;background:${scoreColor};border-radius:4px;transition:width .5s;"></div>
+        </div>` : ""}
+
+        <!-- Accordéon mesures + commandes -->
+        <div class="row g-3">
+          <div class="col-md-7">
+            <div style="font-size:0.75rem;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:1px;margin-bottom:8px;">
+              <i class="fas fa-list-check me-1"></i>Mesures recommandées
+            </div>
+            <ul style="list-style:none;padding:0;margin:0;">
+              ${measuresList}
+            </ul>
+          </div>
+          <div class="col-md-5">
+            <div style="font-size:0.75rem;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:1px;margin-bottom:8px;">
+              <i class="fas fa-terminal me-1"></i>Commandes rapides
+            </div>
+            <div style="background:var(--bg-card);border-radius:8px;padding:12px;border:1px solid var(--border);">
+              ${cmdList || '<div style="color:var(--muted);font-size:0.8rem;">Aucune commande disponible</div>'}
+            </div>
+            <div style="font-size:0.7rem;color:var(--muted);margin-top:6px;">
+              <i class="fas fa-info-circle me-1"></i>Cliquer sur une commande pour copier
+            </div>
+          </div>
+        </div>
+      </div>`;
+    }
+
+    document.getElementById("attacks-container").innerHTML = html;
+
+  } catch(e) {
+    document.getElementById("attacks-container").innerHTML =
+      '<div class="card-section" style="color:var(--red);">Erreur de chargement: ' + e.message + '</div>';
+  }
+}
+
+function copyCmd(el) {
+  const code = el.querySelector("code").textContent;
+  navigator.clipboard.writeText(code).then(() => {
+    el.style.background = "rgba(86,211,100,0.15)";
+    setTimeout(() => el.style.background = "", 800);
+  });
+}
+
+document.addEventListener("DOMContentLoaded", () => { loadMesures(); loadBlockedIPs(); });
+setInterval(loadMesures, 30000);
+setInterval(loadBlockedIPs, 20000);
+</script>
+
+<style>
+.cmd-block {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 6px 10px;
+  margin-top: 6px;
+  cursor: pointer;
+  transition: background .2s;
+}
+.cmd-block:hover {
+  background: rgba(88,166,255,0.08);
+  border-color: var(--blue);
+}
+.measure-item:last-child {
+  border-bottom: none !important;
+}
+</style>
+
+{% endblock %}

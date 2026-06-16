@@ -1,0 +1,152 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta http-equiv="refresh" content="5">
+  <title>Mini-SOC Dashboard</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+  <style>
+    body { background: #0d1117; color: #c9d1d9; font-family: 'Segoe UI', sans-serif; }
+    .navbar-brand { font-weight: 700; letter-spacing: 1px; color: #58a6ff !important; }
+    .stat-card { background: #161b22; border: 1px solid #30363d; border-radius: 10px; padding: 20px; text-align: center; }
+    .stat-card .number { font-size: 2.5rem; font-weight: 700; }
+    .stat-card .label  { font-size: 0.8rem; text-transform: uppercase; letter-spacing: 1px; color: #8b949e; margin-top: 4px; }
+    .table-dark { background: #161b22; }
+    .table-dark th { background: #21262d; color: #8b949e; font-size: 0.75rem; text-transform: uppercase; letter-spacing: 1px; border-color: #30363d; }
+    .table-dark td { border-color: #21262d; font-size: 0.85rem; vertical-align: middle; }
+    .table-dark tr:hover td { background: #1c2128; }
+    .badge-sev { font-size: 0.7rem; padding: 4px 10px; border-radius: 20px; font-weight: 600; }
+    .sev-critical { background: rgba(248,81,73,0.15);  color: #f85149; border: 1px solid #f85149; }
+    .sev-high     { background: rgba(255,123,114,0.15); color: #ff7b72; border: 1px solid #ff7b72; }
+    .sev-medium   { background: rgba(227,179,65,0.15);  color: #e3b341; border: 1px solid #e3b341; }
+    .sev-low      { background: rgba(63,185,80,0.15);   color: #3fb950; border: 1px solid #3fb950; }
+    .section-title { font-size: 0.75rem; text-transform: uppercase; letter-spacing: 2px; color: #58a6ff; margin-bottom: 12px; border-bottom: 1px solid #30363d; padding-bottom: 6px; }
+    .live-dot { width: 8px; height: 8px; background: #3fb950; border-radius: 50%; display: inline-block; animation: pulse 1.5s infinite; margin-right: 6px; }
+    @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.3} }
+    .empty-state { text-align: center; padding: 40px; color: #484f58; }
+    .card-section { background: #161b22; border: 1px solid #30363d; border-radius: 10px; padding: 20px; margin-bottom: 20px; }
+    .type-badge { font-size: 0.7rem; background: #21262d; color: #8b949e; border-radius: 4px; padding: 2px 8px; font-family: monospace; }
+    a.kibana-link { color: #58a6ff; font-size: 0.8rem; text-decoration: none; }
+    a.kibana-link:hover { text-decoration: underline; }
+  </style>
+</head>
+<body>
+
+<nav class="navbar" style="background:#161b22; border-bottom:1px solid #30363d;">
+  <div class="container-fluid">
+    <span class="navbar-brand"><i class="fas fa-shield-alt me-2"></i>Mini-SOC</span>
+    <div class="d-flex align-items-center gap-3">
+      <a class="kibana-link" href="http://192.168.50.10:5601/app/dashboards#/view/06359277-a130-4b6a-a62c-477eb5d8e672" target="_blank">
+        <i class="fas fa-chart-bar me-1"></i>Kibana Dashboard
+      </a>
+      <span style="font-size:0.8rem; color:#8b949e;"><span class="live-dot"></span>Live · refresh 30s</span>
+      <span style="font-size:0.8rem; color:#8b949e;">{{ alerts|length }} alerte{{ 's' if alerts|length != 1 else '' }}</span>
+    </div>
+  </div>
+</nav>
+
+<div class="container-fluid p-4">
+
+  <!-- Métriques -->
+  {% set critical_count = alerts|selectattr('severity','equalto','critical')|list|length %}
+  {% set ssh_count    = alerts|selectattr('alert_type','equalto','ssh_bruteforce')|list|length %}
+  {% set ia_count     = alerts|selectattr('alert_type','equalto','ia_anomaly')|list|length %}
+  {% set cve_count    = alerts|selectattr('alert_type','equalto','cve_critical')|list|length %}
+  {% set ids_count    = alerts|selectattr('alert_type','equalto','suricata_ids')|list|length %}
+
+  <div class="row g-3 mb-4">
+    <div class="col-6 col-md-2">
+      <div class="stat-card">
+        <div class="number" style="color:#58a6ff;">{{ alerts|length }}</div>
+        <div class="label"><i class="fas fa-bell me-1"></i>Total alertes</div>
+      </div>
+    </div>
+    <div class="col-6 col-md-2">
+      <div class="stat-card">
+        <div class="number" style="color:#f85149;">{{ critical_count }}</div>
+        <div class="label"><i class="fas fa-radiation-alt me-1"></i>Critiques</div>
+      </div>
+    </div>
+    <div class="col-6 col-md-2">
+      <div class="stat-card">
+        <div class="number" style="color:#ff7b72;">{{ ssh_count }}</div>
+        <div class="label"><i class="fas fa-terminal me-1"></i>SSH Brute</div>
+      </div>
+    </div>
+    <div class="col-6 col-md-2">
+      <div class="stat-card">
+        <div class="number" style="color:#d2a8ff;">{{ ia_count }}</div>
+        <div class="label"><i class="fas fa-brain me-1"></i>Anomalies IA</div>
+      </div>
+    </div>
+    <div class="col-6 col-md-2">
+      <div class="stat-card">
+        <div class="number" style="color:#e3b341;">{{ cve_count }}</div>
+        <div class="label"><i class="fas fa-bug me-1"></i>CVE critiques</div>
+      </div>
+    </div>
+    <div class="col-6 col-md-2">
+      <div class="stat-card">
+        <div class="number" style="color:#ffa657;">{{ ids_count }}</div>
+        <div class="label"><i class="fas fa-network-wired me-1"></i>IDS Suricata</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Table alertes -->
+  <div class="card-section">
+    <div class="section-title"><i class="fas fa-list me-2"></i>Alertes de sécurité</div>
+
+    {% if alerts|length == 0 %}
+    <div class="empty-state">
+      <i class="fas fa-check-circle fa-2x mb-2" style="color:#3fb950; display:block;"></i>
+      <p class="mb-0" style="color:#3fb950;">Aucune alerte — système nominal</p>
+    </div>
+    {% else %}
+    <div class="table-responsive">
+      <table class="table table-dark table-hover mb-0">
+        <thead>
+          <tr>
+            <th width="40">#</th>
+            <th width="140">Horodatage</th>
+            <th width="130">Type</th>
+            <th width="100">Sévérité</th>
+            <th>Explication</th>
+            <th>Actions recommandées</th>
+          </tr>
+        </thead>
+        <tbody>
+        {% for a in alerts %}
+          <tr>
+            <td style="color:#484f58;">{{ a.id }}</td>
+            <td style="color:#8b949e; white-space:nowrap; font-size:0.78rem;">{{ a.timestamp }}</td>
+            <td><span class="type-badge">{{ a.alert_type }}</span></td>
+            <td>
+              <span class="badge-sev sev-{{ a.severity }}">
+                {% if a.severity == 'critical' %}<i class="fas fa-radiation-alt me-1"></i>
+                {% elif a.severity == 'high' %}<i class="fas fa-exclamation-circle me-1"></i>
+                {% elif a.severity == 'medium' %}<i class="fas fa-exclamation me-1"></i>
+                {% else %}<i class="fas fa-info-circle me-1"></i>
+                {% endif %}
+                {{ a.severity|upper }}
+              </span>
+            </td>
+            <td style="max-width:260px; font-size:0.82rem;">{{ a.explanation }}</td>
+            <td>
+              <ul class="mb-0" style="padding-left:16px; font-size:0.78rem; color:#8b949e;">
+                {% for action in a.actions %}<li>{{ action }}</li>{% endfor %}
+              </ul>
+            </td>
+          </tr>
+        {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% endif %}
+  </div>
+
+</div>
+</body>
+</html>

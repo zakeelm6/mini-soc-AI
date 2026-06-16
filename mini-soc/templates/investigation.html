@@ -1,0 +1,160 @@
+{% extends "base.html" %}
+{% block title %}Investigation{% endblock %}
+{% block content %}
+<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;flex-wrap:wrap;gap:10px;">
+  <div>
+    <h2 style="font-size:1.1rem;font-weight:700;color:var(--text2);margin:0;">
+      <i class="fas fa-search me-2" style="color:var(--cyan);"></i>Investigation
+    </h2>
+    <p style="font-size:0.75rem;color:var(--muted);margin:4px 0 0;">Dossiers d'enquête ouverts — corrélation manuelle des incidents</p>
+  </div>
+  <button class="btn-soc btn-soc-primary" onclick="openCreateModal()">
+    <i class="fas fa-plus"></i>Nouvelle investigation
+  </button>
+</div>
+
+<!-- Stats -->
+<div id="inv-stats" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:12px;margin-bottom:20px;"></div>
+
+<!-- Filters -->
+<div style="display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap;">
+  <select id="fil-status" class="form-select" style="font-size:0.78rem;padding:5px 10px;width:auto;" onchange="loadInvestigations()">
+    <option value="">Tous statuts</option>
+    <option value="open">Ouverte</option>
+    <option value="in_progress">En cours</option>
+    <option value="closed">Fermée</option>
+  </select>
+  <select id="fil-sev" class="form-select" style="font-size:0.78rem;padding:5px 10px;width:auto;" onchange="loadInvestigations()">
+    <option value="">Toutes sévérités</option>
+    <option value="critical">Critical</option>
+    <option value="high">High</option>
+    <option value="medium">Medium</option>
+  </select>
+</div>
+
+<!-- Table -->
+<div class="card-section" style="padding:0;overflow:hidden;">
+  <table class="table soc-table mb-0">
+    <thead>
+      <tr>
+        <th>Titre</th><th>Sévérité</th><th>Statut</th>
+        <th>IP cible</th><th>Incidents liés</th><th>Créée le</th><th>Assignée à</th><th></th>
+      </tr>
+    </thead>
+    <tbody id="inv-tbody"><tr><td colspan="8" class="empty-state">Chargement…</td></tr></tbody>
+  </table>
+</div>
+
+<!-- Modal création -->
+<div id="create-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.6);z-index:1000;align-items:center;justify-content:center;">
+  <div style="background:var(--bg2);border:1px solid var(--border);border-radius:10px;padding:24px;width:460px;max-width:95vw;">
+    <h3 style="font-size:0.95rem;font-weight:700;color:var(--text2);margin:0 0 16px;">Nouvelle investigation</h3>
+    <div style="display:flex;flex-direction:column;gap:12px;">
+      <div>
+        <label style="font-size:0.72rem;color:var(--muted);display:block;margin-bottom:4px;">Titre *</label>
+        <input id="new-title" class="form-control" placeholder="ex: Campagne SSH depuis 192.168.1.x" style="font-size:0.82rem;">
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+        <div>
+          <label style="font-size:0.72rem;color:var(--muted);display:block;margin-bottom:4px;">Sévérité</label>
+          <select id="new-sev" class="form-select" style="font-size:0.8rem;">
+            <option value="critical">Critical</option>
+            <option value="high" selected>High</option>
+            <option value="medium">Medium</option>
+            <option value="low">Low</option>
+          </select>
+        </div>
+        <div>
+          <label style="font-size:0.72rem;color:var(--muted);display:block;margin-bottom:4px;">IP cible</label>
+          <input id="new-ip" class="form-control" placeholder="ex: 192.168.1.100" style="font-size:0.8rem;">
+        </div>
+      </div>
+      <div>
+        <label style="font-size:0.72rem;color:var(--muted);display:block;margin-bottom:4px;">Description</label>
+        <textarea id="new-desc" class="form-control" rows="3" placeholder="Contexte de l'investigation…" style="font-size:0.78rem;resize:none;"></textarea>
+      </div>
+    </div>
+    <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:18px;">
+      <button class="btn-soc" onclick="closeCreateModal()">Annuler</button>
+      <button class="btn-soc btn-soc-primary" onclick="createInvestigation()"><i class="fas fa-plus me-1"></i>Créer</button>
+    </div>
+  </div>
+</div>
+
+<script>
+const SEV_COLOR = {critical:'#FF4757',high:'#FF6B35',medium:'#FFD700',low:'#9FEF00'};
+const STATUS_LABEL = {open:'Ouverte',in_progress:'En cours',closed:'Fermée'};
+
+async function loadInvestigations() {
+  const tbody = document.getElementById('inv-tbody');
+  const status = document.getElementById('fil-status').value;
+  const sev    = document.getElementById('fil-sev').value;
+  tbody.innerHTML = '<tr><td colspan="8" class="empty-state">Chargement…</td></tr>';
+  try {
+    let url = '/api/investigation/list?size=100';
+    if (status) url += `&status=${status}`;
+    if (sev)    url += `&severity=${sev}`;
+    const d = await fetch(url).then(r=>r.json());
+    const items = d.items || [];
+
+    // Stats
+    const byStatus = d.by_status || {};
+    document.getElementById('inv-stats').innerHTML = `
+      <div class="stat-card"><div class="number" style="color:var(--cyan);font-size:1.5rem;">${d.total||0}</div><div class="label">Total</div></div>
+      <div class="stat-card"><div class="number" style="color:var(--orange);font-size:1.5rem;">${byStatus['open']||0}</div><div class="label">Ouvertes</div></div>
+      <div class="stat-card"><div class="number" style="color:var(--yellow);font-size:1.5rem;">${byStatus['in_progress']||0}</div><div class="label">En cours</div></div>
+      <div class="stat-card"><div class="number" style="color:var(--muted);font-size:1.5rem;">${byStatus['closed']||0}</div><div class="label">Fermées</div></div>
+    `;
+
+    if (!items.length) { tbody.innerHTML = '<tr><td colspan="8" class="empty-state">Aucune investigation</td></tr>'; return; }
+    tbody.innerHTML = items.map(inv => {
+      const sc = SEV_COLOR[inv.severity]||'#4B5875';
+      const st = STATUS_LABEL[inv.status]||inv.status||'—';
+      const stColor = inv.status==='open'?'var(--orange)':inv.status==='in_progress'?'var(--yellow)':'var(--muted)';
+      return `<tr>
+        <td><span style="font-weight:600;color:var(--text2);">${inv.title||'Sans titre'}</span></td>
+        <td><span style="color:${sc};font-weight:700;font-size:0.73rem;">${(inv.severity||'').toUpperCase()}</span></td>
+        <td><span style="color:${stColor};font-size:0.73rem;">${st}</span></td>
+        <td><code style="color:var(--cyan);font-size:0.75rem;">${inv.target_ip||'—'}</code></td>
+        <td style="color:var(--muted);">${(inv.incident_ids||[]).length}</td>
+        <td style="font-size:0.73rem;color:var(--muted);">${(inv.created_at||'').slice(0,16).replace('T',' ')}</td>
+        <td style="font-size:0.75rem;color:var(--muted);">${inv.assigned_to||'—'}</td>
+        <td>
+          <a href="/incidents?ip=${encodeURIComponent(inv.target_ip||'')}" class="btn-soc" style="font-size:0.7rem;padding:3px 10px;" title="Voir incidents liés">
+            <i class="fas fa-ticket-alt"></i>
+          </a>
+        </td>
+      </tr>`;
+    }).join('');
+  } catch(e) { tbody.innerHTML = `<tr><td colspan="8" style="color:var(--red);padding:20px;">${e.message}</td></tr>`; }
+}
+
+function openCreateModal()  { document.getElementById('create-modal').style.display='flex'; }
+function closeCreateModal() { document.getElementById('create-modal').style.display='none'; }
+
+async function createInvestigation() {
+  const title = document.getElementById('new-title').value.trim();
+  if (!title) { alert('Le titre est requis'); return; }
+  const payload = {
+    title,
+    severity: document.getElementById('new-sev').value,
+    target_ip: document.getElementById('new-ip').value.trim(),
+    description: document.getElementById('new-desc').value.trim(),
+  };
+  try {
+    const r = await fetch('/api/investigation/create', {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify(payload)
+    }).then(r=>r.json());
+    if (r.error) { alert('Erreur : ' + r.error); return; }
+    closeCreateModal();
+    document.getElementById('new-title').value='';
+    document.getElementById('new-ip').value='';
+    document.getElementById('new-desc').value='';
+    loadInvestigations();
+  } catch(e) { alert(e.message); }
+}
+
+loadInvestigations();
+</script>
+{% endblock %}

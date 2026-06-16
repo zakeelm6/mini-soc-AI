@@ -1,0 +1,558 @@
+{% extends "base.html" %}
+{% block title %}Ollama — LLM & Amélioration ML{% endblock %}
+{% block content %}
+
+<div class="d-flex justify-content-between align-items-center mb-3">
+  <div>
+    <h5 style="margin:0;font-weight:700;"><i class="fas fa-robot me-2" style="color:var(--blue);"></i>Ollama llama3 — LLM Local & Boucle d'Amélioration</h5>
+    <div style="font-size:0.78rem;color:var(--muted);">Comment le LLM enrichit les données et améliore les modèles ML/DL</div>
+  </div>
+  <div class="d-flex gap-2 align-items-center">
+    <span id="ollama-status-dot" class="offline-dot"></span>
+    <span id="ollama-status-text" style="font-size:0.78rem;color:var(--muted);">Vérification…</span>
+  </div>
+</div>
+
+<!-- Stats Ollama en temps réel -->
+<div class="row g-2 mb-4" id="stats-row">
+  <div class="col-6 col-md">
+    <div class="stat-card">
+      <div class="number" style="color:var(--blue);font-size:1.6rem;" id="stat-analyzed">—</div>
+      <div class="label">Incidents analysés</div>
+    </div>
+  </div>
+  <div class="col-6 col-md">
+    <div class="stat-card">
+      <div class="number" style="color:var(--green);font-size:1.6rem;" id="stat-tp">—</div>
+      <div class="label">Vrais positifs (TP)</div>
+    </div>
+  </div>
+  <div class="col-6 col-md">
+    <div class="stat-card">
+      <div class="number" style="color:var(--red);font-size:1.6rem;" id="stat-fp">—</div>
+      <div class="label">Faux positifs (FP)</div>
+    </div>
+  </div>
+  <div class="col-6 col-md">
+    <div class="stat-card">
+      <div class="number" style="color:var(--orange);font-size:1.6rem;" id="stat-fallback">—</div>
+      <div class="label">Fallback (LLM busy)</div>
+    </div>
+  </div>
+  <div class="col-6 col-md">
+    <div class="stat-card">
+      <div class="number" style="color:var(--purple);font-size:1.6rem;" id="stat-labels">—</div>
+      <div class="label">Labels (TP+FP)</div>
+    </div>
+  </div>
+  <div class="col-6 col-md">
+    <div class="stat-card">
+      <div class="number" style="color:var(--green);font-size:1.6rem;" id="stat-memory">—</div>
+      <div class="label">Mémoire few-shot</div>
+    </div>
+  </div>
+</div>
+
+<!-- Description Ollama -->
+<div class="row g-3 mb-4">
+  <div class="col-lg-6">
+    <div class="card-section h-100" style="border-left:3px solid var(--blue);">
+      <div class="section-title"><i class="fas fa-robot me-1"></i>Qu'est-ce qu'Ollama ?</div>
+      <p style="font-size:0.82rem;color:var(--text);line-height:1.6;margin-bottom:10px;">
+        <strong style="color:var(--blue);">Ollama</strong> est un runtime LLM local qui héberge des modèles de langage directement sur la machine SOC,
+        sans envoyer de données vers des serveurs externes. Le modèle utilisé est <strong>llama3 (8B paramètres, 4.7 GB)</strong>.
+      </p>
+      <div style="background:var(--bg3);border-radius:8px;padding:12px;margin-bottom:10px;">
+        <div style="font-size:0.72rem;color:var(--muted);margin-bottom:6px;text-transform:uppercase;letter-spacing:1px;">Architecture</div>
+        <div style="font-size:0.78rem;color:var(--text);">
+          <i class="fas fa-circle me-1" style="color:var(--blue);font-size:0.5rem;"></i>Modèle : <strong>meta-llama/llama-3-8b</strong> (quantifié Q4_0)<br>
+          <i class="fas fa-circle me-1" style="color:var(--blue);font-size:0.5rem;"></i>Port : <strong>:11434</strong> — API REST compatible OpenAI<br>
+          <i class="fas fa-circle me-1" style="color:var(--blue);font-size:0.5rem;"></i>Inférence CPU : ~170-200s / incident<br>
+          <i class="fas fa-circle me-1" style="color:var(--blue);font-size:0.5rem;"></i>Semaphore : 1 analyse simultanée max (file d'attente)<br>
+          <i class="fas fa-circle me-1" style="color:var(--blue);font-size:0.5rem;"></i>Timeout : 240s avec fallback automatique
+        </div>
+      </div>
+      <div style="font-size:0.78rem;color:var(--muted);line-height:1.6;">
+        Chaque incident créé par l'Ensemble déclenche une analyse LLM asynchrone. Le LLM reçoit le contexte complet
+        (IP, scores ML, logs représentatifs) et retourne un verdict structuré en JSON.
+      </div>
+    </div>
+  </div>
+
+  <div class="col-lg-6">
+    <div class="card-section h-100" style="border-left:3px solid var(--purple);">
+      <div class="section-title"><i class="fas fa-code me-1"></i>Format de sortie JSON</div>
+      <div style="background:var(--bg3);border-radius:8px;padding:12px;font-family:monospace;font-size:0.73rem;color:var(--text);line-height:1.8;">
+        <span style="color:var(--muted);">{</span><br>
+        &nbsp;&nbsp;<span style="color:var(--green);">"verdict"</span>: <span style="color:var(--yellow);">"true_positive"</span>,&nbsp;&nbsp;<span style="color:var(--muted);font-style:italic;">// true_positive | false_positive | uncertain</span><br>
+        &nbsp;&nbsp;<span style="color:var(--green);">"attack_type"</span>: <span style="color:var(--yellow);">"ssh_brute_force"</span>,<br>
+        &nbsp;&nbsp;<span style="color:var(--green);">"confidence"</span>: <span style="color:var(--orange);">0.92</span>,&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span style="color:var(--muted);font-style:italic;">// 0.0 – 1.0</span><br>
+        &nbsp;&nbsp;<span style="color:var(--green);">"summary"</span>: <span style="color:var(--yellow);">"192.168.122.231 a tenté..."</span>,<br>
+        &nbsp;&nbsp;<span style="color:var(--green);">"evidence"</span>: [<span style="color:var(--yellow);">"234 tentatives SSH"</span>, ...],<br>
+        &nbsp;&nbsp;<span style="color:var(--green);">"recommended_actions"</span>: [<span style="color:var(--yellow);">"Bloquer IP"</span>, ...],<br>
+        &nbsp;&nbsp;<span style="color:var(--green);">"severity_assessment"</span>: <span style="color:var(--yellow);">"critical"</span>,<br>
+        &nbsp;&nbsp;<span style="color:var(--green);">"ml_scores_comment"</span>: <span style="color:var(--yellow);">"IF=0.9 RF=0.98..."</span><br>
+        <span style="color:var(--muted);">}</span>
+      </div>
+      <div style="font-size:0.75rem;color:var(--muted);margin-top:10px;line-height:1.5;">
+        Ce JSON structuré est stocké dans l'index <code style="background:var(--bg3);padding:1px 5px;border-radius:3px;">soc-incidents</code>
+        et affiché dans le panneau d'analyse de chaque incident. Il constitue la <strong style="color:var(--purple);">source de vérité</strong>
+        pour l'amélioration des modèles ML.
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Boucle d'amélioration ML -->
+<div class="card-section mb-4" style="border-left:3px solid var(--green);">
+  <div class="section-title"><i class="fas fa-sync-alt me-1"></i>Boucle d'Amélioration ML/DL — Comment Ollama aide les modèles</div>
+
+  <div style="display:flex;gap:0;align-items:center;overflow-x:auto;padding:16px 0;min-width:700px;">
+
+    <div class="loop-step" style="border-color:var(--blue);">
+      <div class="loop-icon" style="background:rgba(88,166,255,0.15);border-color:var(--blue);">
+        <i class="fas fa-stream" style="color:var(--blue);font-size:1.1rem;"></i>
+      </div>
+      <div class="loop-title" style="color:var(--blue);">1. Logs bruts</div>
+      <div class="loop-desc">auth.log, apache, syslog — données non labellisées</div>
+    </div>
+
+    <div class="loop-arrow">→</div>
+
+    <div class="loop-step" style="border-color:var(--purple);">
+      <div class="loop-icon" style="background:rgba(210,168,255,0.15);border-color:var(--purple);">
+        <i class="fas fa-brain" style="color:var(--purple);font-size:1.1rem;"></i>
+      </div>
+      <div class="loop-title" style="color:var(--purple);">2. Modèles ML</div>
+      <div class="loop-desc">IF + RF + DL + Rate → scores d'anomalie par IP</div>
+    </div>
+
+    <div class="loop-arrow">→</div>
+
+    <div class="loop-step" style="border-color:var(--orange);">
+      <div class="loop-icon" style="background:rgba(255,166,87,0.15);border-color:var(--orange);">
+        <i class="fas fa-vote-yea" style="color:var(--orange);font-size:1.1rem;"></i>
+      </div>
+      <div class="loop-title" style="color:var(--orange);">3. Ensemble</div>
+      <div class="loop-desc">Vote ≥2/4, score pondéré → incidents créés</div>
+    </div>
+
+    <div class="loop-arrow">→</div>
+
+    <div class="loop-step" style="border-color:var(--red);">
+      <div class="loop-icon" style="background:rgba(248,81,73,0.15);border-color:var(--red);">
+        <i class="fas fa-robot" style="color:var(--red);font-size:1.1rem;"></i>
+      </div>
+      <div class="loop-title" style="color:var(--red);">4. Ollama LLM</div>
+      <div class="loop-desc">Analyse contextuelle → verdict + type + confiance</div>
+    </div>
+
+    <div class="loop-arrow">→</div>
+
+    <div class="loop-step" style="border-color:var(--yellow);">
+      <div class="loop-icon" style="background:rgba(227,179,65,0.15);border-color:var(--yellow);">
+        <i class="fas fa-tags" style="color:var(--yellow);font-size:1.1rem;"></i>
+      </div>
+      <div class="loop-title" style="color:var(--yellow);">5. Labels générés</div>
+      <div class="loop-desc">TP/FP/uncertain + type d'attaque → dataset enrichi</div>
+    </div>
+
+    <div class="loop-arrow">→</div>
+
+    <div class="loop-step" style="border-color:var(--green);">
+      <div class="loop-icon" style="background:rgba(63,185,80,0.15);border-color:var(--green);">
+        <i class="fas fa-graduation-cap" style="color:var(--green);font-size:1.1rem;"></i>
+      </div>
+      <div class="loop-title" style="color:var(--green);">6. Ré-entraînement</div>
+      <div class="loop-desc">RF / DL retrained sur données LLM-labellisées</div>
+    </div>
+
+  </div>
+
+  <div style="font-size:0.78rem;color:var(--muted);margin-top:8px;background:var(--bg3);border-radius:8px;padding:12px;">
+    <i class="fas fa-info-circle me-1" style="color:var(--blue);"></i>
+    La boucle crée un <strong style="color:var(--text);">système auto-supervisé</strong> : les modèles ML détectent des anomalies,
+    Ollama les valide/invalide avec son raisonnement contextuel, et les verdicts deviennent des labels de haute qualité pour
+    ré-entraîner les modèles. Contrairement aux labels manuels (coûteux), le LLM labellise en continu 24/7.
+  </div>
+</div>
+
+<!-- Apports concrets par modèle -->
+<div class="row g-3 mb-4">
+  <div class="col-md-6">
+    <div class="card-section h-100" style="border-left:3px solid var(--green);">
+      <div class="section-title"><i class="fas fa-check-double me-1"></i>Impact sur Random Forest</div>
+      <div style="font-size:0.82rem;color:var(--text);line-height:1.8;">
+        <div class="mb-2">
+          <span class="badge-sev sev-high me-2">Problème actuel</span>
+          <span style="font-size:0.78rem;color:var(--muted);">RF labellise uniquement par IP connue (192.168.122.231/122.1).
+          Toute nouvelle IP attaquante sera classée normale.</span>
+        </div>
+        <div style="background:var(--bg3);border-radius:6px;padding:10px;font-size:0.78rem;">
+          <strong style="color:var(--green);">Apport LLM :</strong><br>
+          <i class="fas fa-arrow-right me-1" style="color:var(--green);"></i>
+          Ollama valide chaque nouvelle anomalie comme TP ou FP<br>
+          <i class="fas fa-arrow-right me-1" style="color:var(--green);"></i>
+          Les IPs validées comme TP alimentent <code>ATTACK_IPS</code> dans rf_detector.py<br>
+          <i class="fas fa-arrow-right me-1" style="color:var(--green);"></i>
+          Le dataset grandit à chaque cycle : <strong id="rf-dataset-size">8245</strong> → <strong style="color:var(--green);">+N</strong> logs<br>
+          <i class="fas fa-arrow-right me-1" style="color:var(--green);"></i>
+          F1=1.0 maintenu même sur nouvelles IPs attaquantes
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="col-md-6">
+    <div class="card-section h-100" style="border-left:3px solid var(--orange);">
+      <div class="section-title"><i class="fas fa-project-diagram me-1"></i>Impact sur Autoencoder DL</div>
+      <div style="font-size:0.82rem;color:var(--text);line-height:1.8;">
+        <div class="mb-2">
+          <span class="badge-sev sev-high me-2">Problème actuel</span>
+          <span style="font-size:0.78rem;color:var(--muted);">L'autoencoder apprend un profil "normal" statique.
+          Si le trafic normal change, le seuil de reconstruction devient inadapté.</span>
+        </div>
+        <div style="background:var(--bg3);border-radius:6px;padding:10px;font-size:0.78rem;">
+          <strong style="color:var(--orange);">Apport LLM :</strong><br>
+          <i class="fas fa-arrow-right me-1" style="color:var(--orange);"></i>
+          Identifie quels incidents DL sont des FP (normal mal classé)<br>
+          <i class="fas fa-arrow-right me-1" style="color:var(--orange);"></i>
+          Ajuste dynamiquement le seuil <code>DL_THRESHOLD</code> de l'ensemble<br>
+          <i class="fas fa-arrow-right me-1" style="color:var(--orange);"></i>
+          Les logs FP ré-entraînent l'autoencoder pour élargir "la normale"<br>
+          <i class="fas fa-arrow-right me-1" style="color:var(--orange);"></i>
+          Réduit les faux positifs DL sans perdre en sensibilité
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="col-md-6">
+    <div class="card-section h-100" style="border-left:3px solid var(--purple);">
+      <div class="section-title"><i class="fas fa-tree me-1"></i>Impact sur Isolation Forest</div>
+      <div style="font-size:0.82rem;color:var(--text);line-height:1.8;">
+        <div class="mb-2">
+          <span class="badge-sev sev-medium me-2">Problème actuel</span>
+          <span style="font-size:0.78rem;color:var(--muted);">IF est non-supervisé : ne sait pas si une anomalie est une vraie attaque
+          ou un comportement inhabituel mais légitime.</span>
+        </div>
+        <div style="background:var(--bg3);border-radius:6px;padding:10px;font-size:0.78rem;">
+          <strong style="color:var(--purple);">Apport LLM :</strong><br>
+          <i class="fas fa-arrow-right me-1" style="color:var(--purple);"></i>
+          Fournit une supervision post-hoc aux anomalies IF<br>
+          <i class="fas fa-arrow-right me-1" style="color:var(--purple);"></i>
+          Calibre <code>IF_THRESHOLD</code> en réduisant FP LLM-confirmés<br>
+          <i class="fas fa-arrow-right me-1" style="color:var(--purple);"></i>
+          Le type d'attaque LLM révèle quels features IF exploite mal<br>
+          <i class="fas fa-arrow-right me-1" style="color:var(--purple);"></i>
+          Permet d'ajouter des features ciblées (ex: <code>failed_attempts_ratio</code>)
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="col-md-6">
+    <div class="card-section h-100" style="border-left:3px solid var(--yellow);">
+      <div class="section-title"><i class="fas fa-tachometer-alt me-1"></i>Impact sur Rate Detector & Ensemble</div>
+      <div style="font-size:0.82rem;color:var(--text);line-height:1.8;">
+        <div class="mb-2">
+          <span class="badge-sev sev-low me-2">Opportunité</span>
+          <span style="font-size:0.78rem;color:var(--muted);">Le Rate Detector utilise des seuils fixes (10/30 logs/5min).
+          Les poids de l'ensemble sont statiques (IF×0.30, RF×0.35…).</span>
+        </div>
+        <div style="background:var(--bg3);border-radius:6px;padding:10px;font-size:0.78rem;">
+          <strong style="color:var(--yellow);">Apport LLM :</strong><br>
+          <i class="fas fa-arrow-right me-1" style="color:var(--yellow);"></i>
+          Analyse les patterns Rate TP/FP → seuils adaptatifs<br>
+          <i class="fas fa-arrow-right me-1" style="color:var(--yellow);"></i>
+          Corrélation verdict LLM vs votes modèles → ajuste les poids<br>
+          <i class="fas fa-arrow-right me-1" style="color:var(--yellow);"></i>
+          Si RF vote toujours avec LLM : W_RF augmente<br>
+          <i class="fas fa-arrow-right me-1" style="color:var(--yellow);"></i>
+          Si Rate crée trop de FP : W_RATE diminue
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Features suggérées par LLM -->
+<div class="card-section mb-4" style="border-left:3px solid var(--blue);">
+  <div class="section-title"><i class="fas fa-lightbulb me-1"></i>Features ML Suggérées par Analyse LLM</div>
+  <p style="font-size:0.78rem;color:var(--muted);margin-bottom:14px;">
+    En analysant les patterns des incidents TP/FP, Ollama révèle quelles informations les modèles ML n'exploitent pas encore.
+  </p>
+  <div class="row g-2">
+    {% for feat in features %}
+    <div class="col-md-4 col-lg-3">
+      <div style="background:var(--bg3);border:1px solid var(--border);border-radius:8px;padding:10px;height:100%;">
+        <div style="display:flex;align-items:center;gap:6px;margin-bottom:4px;">
+          <span class="badge-sev {{ feat.priority_class }}">{{ feat.priority }}</span>
+          <code style="font-size:0.7rem;color:var(--text);">{{ feat.name }}</code>
+        </div>
+        <div style="font-size:0.72rem;color:var(--muted);">{{ feat.desc }}</div>
+        <div style="font-size:0.68rem;color:var(--blue);margin-top:4px;font-style:italic;">→ {{ feat.model }}</div>
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+</div>
+
+<!-- Auto-étiquetage TP/FP par IA -->
+<div class="card-section mb-4" style="border-left:3px solid var(--green);">
+  <div class="section-title"><i class="fas fa-magic me-1" style="color:var(--green);"></i>Auto-étiquetage TP/FP par l'IA</div>
+  <p style="font-size:0.80rem;color:var(--muted);margin-bottom:12px;">
+    Le service <strong style="color:var(--text);">auto_labeler</strong> analyse automatiquement les incidents avec une analyse Ollama (llama3, confiance ≥ 75%)
+    et applique le verdict sans intervention humaine : <span style="color:var(--red);">true_positive</span> → statut <em>in_progress</em>,
+    <span style="color:var(--green);">false_positive</span> → statut <em>closed</em>. Après 3 nouveaux labels, le RF est ré-entraîné automatiquement.
+  </p>
+  <!-- Stats auto-label -->
+  <div class="row g-2 mb-3" id="auto-label-stats-row">
+    <div class="col-6 col-md-3">
+      <div style="background:var(--bg3);border-radius:8px;padding:10px 14px;text-align:center;">
+        <div style="font-size:1.4rem;font-weight:700;color:var(--green);" id="al-total">—</div>
+        <div style="font-size:0.70rem;color:var(--muted);">Auto-étiquetés</div>
+      </div>
+    </div>
+    <div class="col-6 col-md-3">
+      <div style="background:var(--bg3);border-radius:8px;padding:10px 14px;text-align:center;">
+        <div style="font-size:1.4rem;font-weight:700;color:var(--red);" id="al-tp">—</div>
+        <div style="font-size:0.70rem;color:var(--muted);">TP auto-confirmés</div>
+      </div>
+    </div>
+    <div class="col-6 col-md-3">
+      <div style="background:var(--bg3);border-radius:8px;padding:10px 14px;text-align:center;">
+        <div style="font-size:1.4rem;font-weight:700;color:var(--blue);" id="al-fp">—</div>
+        <div style="font-size:0.70rem;color:var(--muted);">FP auto-fermés</div>
+      </div>
+    </div>
+    <div class="col-6 col-md-3">
+      <div style="background:var(--bg3);border-radius:8px;padding:10px 14px;text-align:center;">
+        <div style="font-size:1.4rem;font-weight:700;color:var(--purple);" id="al-retrains">—</div>
+        <div style="font-size:0.70rem;color:var(--muted);">RF retrain déclenchés</div>
+      </div>
+    </div>
+  </div>
+  <!-- Flux auto-label -->
+  <div style="background:var(--bg3);border-radius:8px;padding:10px 14px;margin-bottom:12px;font-size:0.78rem;">
+    <div style="color:var(--muted);margin-bottom:6px;text-transform:uppercase;font-size:0.65rem;letter-spacing:1px;">Flux automatique</div>
+    <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+      <span style="background:var(--bg2);border:1px solid var(--border);border-radius:6px;padding:4px 10px;color:var(--blue);"><i class="fas fa-robot me-1"></i>Ollama analyse</span>
+      <i class="fas fa-arrow-right" style="color:var(--muted);font-size:0.7rem;"></i>
+      <span style="background:var(--bg2);border:1px solid var(--border);border-radius:6px;padding:4px 10px;color:var(--text);">conf ≥ 75%</span>
+      <i class="fas fa-arrow-right" style="color:var(--muted);font-size:0.7rem;"></i>
+      <span style="background:var(--bg2);border:1px solid var(--border);border-radius:6px;padding:4px 10px;color:var(--green);"><i class="fas fa-tag me-1"></i>auto_labeler (120s)</span>
+      <i class="fas fa-arrow-right" style="color:var(--muted);font-size:0.7rem;"></i>
+      <span style="background:var(--bg2);border:1px solid var(--border);border-radius:6px;padding:4px 10px;color:var(--red);">verdict ES mis à jour</span>
+      <i class="fas fa-arrow-right" style="color:var(--muted);font-size:0.7rem;"></i>
+      <span style="background:var(--bg2);border:1px solid var(--border);border-radius:6px;padding:4px 10px;color:var(--purple);">≥3 labels → RF retrain</span>
+    </div>
+  </div>
+  <!-- Historique auto-label -->
+  <div id="al-history" style="max-height:180px;overflow-y:auto;font-size:0.75rem;">
+    <div class="empty-state" style="padding:20px;"><i class="fas fa-spinner fa-spin"></i> Chargement…</div>
+  </div>
+  <button class="btn-soc btn-soc-primary mt-2" onclick="runAutoLabel()" id="btn-autolabel">
+    <i class="fas fa-magic"></i>Lancer un cycle d'auto-étiquetage maintenant
+  </button>
+</div>
+
+<!-- Actions disponibles -->
+<div class="card-section mb-4" style="border-left:3px solid var(--red);">
+  <div class="section-title"><i class="fas fa-tools me-1"></i>Actions de Ré-entraînement</div>
+  <div class="row g-2">
+    <div class="col-md-4">
+      <button class="btn-soc w-100 justify-content-center" onclick="exportLabels()" id="btn-export">
+        <i class="fas fa-download"></i>Exporter labels LLM (CSV)
+      </button>
+    </div>
+    <div class="col-md-4">
+      <button class="btn-soc btn-soc-primary w-100 justify-content-center" onclick="retrain()" id="btn-retrain">
+        <i class="fas fa-sync-alt"></i>Ré-entraîner RF sur labels LLM
+      </button>
+    </div>
+    <div class="col-md-4">
+      <button class="btn-soc w-100 justify-content-center" onclick="testOllama()" id="btn-test">
+        <i class="fas fa-play"></i>Tester Ollama (analyse live)
+      </button>
+    </div>
+  </div>
+  <div id="action-result" style="display:none;margin-top:12px;background:var(--bg3);border-radius:8px;padding:12px;font-size:0.78rem;font-family:monospace;white-space:pre-wrap;"></div>
+</div>
+
+<!-- Dernières analyses LLM -->
+<div class="card-section">
+  <div class="section-title"><i class="fas fa-history me-1"></i>Dernières Analyses Ollama</div>
+  <div id="llm-history">
+    <div class="empty-state"><i class="fas fa-spinner fa-spin"></i> Chargement…</div>
+  </div>
+</div>
+
+<style>
+.loop-step {
+  display: flex; flex-direction: column; align-items: center; text-align: center;
+  min-width: 110px; padding: 10px 6px; background: var(--bg2);
+  border: 1px solid; border-radius: 10px; gap: 4px;
+}
+.loop-icon {
+  width: 44px; height: 44px; border-radius: 10px; border: 1.5px solid;
+  display: flex; align-items: center; justify-content: center;
+}
+.loop-title { font-size: 0.75rem; font-weight: 700; }
+.loop-desc  { font-size: 0.62rem; color: var(--muted); line-height: 1.3; }
+.loop-arrow { font-size: 1.4rem; color: var(--border); padding: 0 6px; flex-shrink: 0; margin-top: -30px; }
+</style>
+
+<script>
+// Check Ollama status
+async function checkOllama() {
+  try {
+    const d = await fetch('/api/pipeline/status').then(r => r.json());
+    const up = d.services && d.services.ollama;
+    document.getElementById('ollama-status-dot').className = up ? 'live-dot' : 'offline-dot';
+    document.getElementById('ollama-status-text').textContent = up ? 'Ollama :11434 — UP' : 'Ollama — OFFLINE';
+  } catch(e) {}
+}
+checkOllama();
+setInterval(checkOllama, 30000);
+
+// Load stats
+async function loadStats() {
+  try {
+    const d = await fetch('/api/ollama/stats').then(r => r.json());
+    document.getElementById('stat-analyzed').textContent = d.analyzed ?? '—';
+    document.getElementById('stat-tp').textContent = d.true_positive ?? '—';
+    document.getElementById('stat-fp').textContent = d.false_positive ?? '—';
+    document.getElementById('stat-fallback').textContent = d.fallback ?? '—';
+    document.getElementById('stat-labels').textContent = d.labels_available ?? '—';
+    document.getElementById('stat-memory').textContent = d.memory_examples ?? '—';
+  } catch(e) {}
+}
+loadStats();
+
+// Load LLM history
+async function loadHistory() {
+  try {
+    const d = await fetch('/api/ollama/history').then(r => r.json());
+    const el = document.getElementById('llm-history');
+    if (!d.length) {
+      el.innerHTML = '<div class="empty-state"><i class="fas fa-robot"></i><br>Aucune analyse LLM disponible</div>';
+      return;
+    }
+    el.innerHTML = d.map(inc => `
+      <div style="padding:10px 0;border-bottom:1px solid var(--border);">
+        <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
+          <span class="type-mono">${esc(inc.src_ip || '?')}</span>
+          <span class="badge-sev ${sevClass(inc.severity)}">${esc(inc.severity||'?')}</span>
+          ${verdictBadge(inc.llm_verdict)}
+          <span style="font-size:0.72rem;color:var(--muted);">${esc(inc.llm_attack_type||'')}</span>
+          ${inc.llm_confidence ? `<div style="display:flex;align-items:center;gap:6px;font-size:0.72rem;color:var(--muted);">confiance: <div style="width:80px;height:6px;background:var(--bg3);border-radius:3px;overflow:hidden;"><div style="height:100%;background:var(--green);width:${Math.round(inc.llm_confidence*100)}%"></div></div><span style="color:var(--text);">${Math.round(inc.llm_confidence*100)}%</span></div>` : ''}
+          <span style="font-size:0.68rem;color:var(--muted);margin-left:auto;">${esc(inc.llm_model||'')}</span>
+        </div>
+        ${inc.llm_summary ? `<div style="font-size:0.75rem;color:var(--muted);margin-top:4px;padding-left:4px;">${esc(inc.llm_summary)}</div>` : ''}
+        ${inc.llm_actions?.length ? `<div style="margin-top:6px;display:flex;gap:6px;flex-wrap:wrap;">${inc.llm_actions.map(a=>`<span style="background:var(--bg3);color:var(--blue);border:1px solid var(--border);border-radius:12px;font-size:0.65rem;padding:2px 8px;">${esc(a)}</span>`).join('')}</div>` : ''}
+      </div>
+    `).join('');
+  } catch(e) {
+    document.getElementById('llm-history').innerHTML = '<div class="empty-state">Erreur de chargement</div>';
+  }
+}
+loadHistory();
+
+function esc(s) { const d=document.createElement('div'); d.textContent=String(s||''); return d.innerHTML; }
+function sevClass(s) { return {critical:'sev-critical',high:'sev-high',medium:'sev-medium',low:'sev-low'}[s]||'sev-info'; }
+function verdictBadge(v) {
+  if (!v || v==='?') return '';
+  const m = {true_positive:{c:'sev-critical',i:'fa-check-circle',t:'Vrai positif'},
+             false_positive:{c:'sev-low',i:'fa-times-circle',t:'Faux positif'},
+             uncertain:{c:'sev-medium',i:'fa-question-circle',t:'Incertain'}};
+  const x = m[v] || {c:'sev-info',i:'fa-circle',t:v};
+  return `<span class="badge-sev ${x.c}"><i class="fas ${x.i} me-1"></i>${x.t}</span>`;
+}
+
+async function exportLabels() {
+  const btn = document.getElementById('btn-export');
+  btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Export…';
+  try {
+    const d = await fetch('/api/ollama/export_labels').then(r => r.json());
+    showResult(`Labels exportés : ${d.count} incidents\nFichier : ${d.path}`);
+  } catch(e) { showResult('Erreur: ' + e); }
+  btn.innerHTML = '<i class="fas fa-download"></i>Exporter labels LLM (CSV)';
+}
+
+async function retrain() {
+  const btn = document.getElementById('btn-retrain');
+  btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Ré-entraînement…';
+  try {
+    const d = await fetch('/api/ollama/retrain_rf', {method:'POST'}).then(r => r.json());
+    if (d.error) { showResult('Erreur: ' + d.error); }
+    else { showResult(`RF ré-entraîné !\nDataset: ${d.dataset_size} logs (dont ${d.llm_labels} labels LLM)\nF1: ${d.f1}\nPrécision: ${d.precision}\nRappel: ${d.recall}`); }
+  } catch(e) { showResult('Erreur: ' + e); }
+  btn.innerHTML = '<i class="fas fa-sync-alt"></i>Ré-entraîner RF sur labels LLM';
+}
+
+async function testOllama() {
+  const btn = document.getElementById('btn-test');
+  btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Analyse en cours (~200s)…';
+  try {
+    const d = await fetch('/api/ollama/test', {method:'POST'}).then(r => r.json());
+    showResult(JSON.stringify(d, null, 2));
+  } catch(e) { showResult('Erreur: ' + e); }
+  btn.innerHTML = '<i class="fas fa-play"></i>Tester Ollama (analyse live)';
+}
+
+function showResult(txt) {
+  const el = document.getElementById('action-result');
+  el.textContent = txt;
+  el.style.display = 'block';
+}
+
+async function loadAutoLabelStats() {
+  try {
+    const d = await fetch('/api/ollama/auto_label_stats').then(r => r.json());
+    document.getElementById('al-total').textContent = d.total_auto_labeled ?? 0;
+    document.getElementById('al-tp').textContent = d.true_positives ?? 0;
+    document.getElementById('al-fp').textContent = d.false_positives ?? 0;
+    document.getElementById('al-retrains').textContent = d.retrains_triggered ?? 0;
+    const hist = (d.history || []).slice(-15).reverse();
+    const el = document.getElementById('al-history');
+    if (!hist.length) {
+      el.innerHTML = '<div style="color:var(--muted);padding:10px;text-align:center;font-size:0.72rem;">Aucun auto-étiquetage encore effectué</div>';
+      return;
+    }
+    el.innerHTML = hist.map(e => {
+      const v = e.verdict === 'true_positive';
+      const col = v ? 'var(--red)' : 'var(--green)';
+      const icon = v ? 'fa-check-circle' : 'fa-times-circle';
+      const label = v ? 'TP' : 'FP';
+      const ts = new Date(e.ts).toLocaleString('fr-FR', {hour:'2-digit',minute:'2-digit',day:'2-digit',month:'2-digit'});
+      return `<div style="display:flex;align-items:center;gap:10px;padding:5px 0;border-bottom:1px solid var(--border);">
+        <i class="fas ${icon}" style="color:${col};width:14px;"></i>
+        <span style="color:var(--text);font-family:monospace;font-size:0.75rem;">${esc(e.src_ip||'?')}</span>
+        <span style="color:${col};font-size:0.70rem;font-weight:700;">${label}</span>
+        <span style="color:var(--muted);font-size:0.68rem;">conf: ${Math.round((e.confidence||0)*100)}%</span>
+        <span style="color:var(--muted);font-size:0.68rem;margin-left:auto;">${ts}</span>
+      </div>`;
+    }).join('');
+  } catch(e) {
+    document.getElementById('al-history').innerHTML = '<div style="color:var(--muted);padding:10px;text-align:center;font-size:0.72rem;">Erreur de chargement</div>';
+  }
+}
+loadAutoLabelStats();
+setInterval(loadAutoLabelStats, 30000);
+
+async function runAutoLabel() {
+  const btn = document.getElementById('btn-autolabel');
+  btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> En cours…';
+  btn.disabled = true;
+  try {
+    const d = await fetch('/api/ollama/run_auto_label', {method:'POST'}).then(r => r.json());
+    if (d.error) { showResult('Erreur: ' + d.error); }
+    else { showResult('Auto-étiquetage terminé :\n' + (d.output || 'OK')); }
+    await loadAutoLabelStats();
+  } catch(e) { showResult('Erreur: ' + e); }
+  btn.innerHTML = '<i class="fas fa-magic"></i>Lancer un cycle d\'auto-étiquetage maintenant';
+  btn.disabled = false;
+}
+</script>
+{% endblock %}

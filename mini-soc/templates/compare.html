@@ -1,0 +1,639 @@
+{% extends "base.html" %}
+{% block title %}Comparaison IA{% endblock %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+  <h5 class="mb-0"><i class="fas fa-balance-scale me-2" style="color:var(--purple)"></i>Comparaison — Isolation Forest vs Autoencoder</h5>
+  <div class="d-flex gap-2 align-items-center">
+    <select id="windowSelect" class="form-select form-select-sm" style="width:120px;background:var(--bg3);color:var(--text);border-color:var(--border)">
+      <option value="1h">1h</option>
+      <option value="6h">6h</option>
+      <option value="24h" selected>24h</option>
+      <option value="7d">7 jours</option>
+    </select>
+    <span class="text-muted small" id="last-update">—</span>
+  </div>
+</div>
+
+<!-- Section A — KPI côte à côte -->
+<div class="row g-3 mb-4">
+  <!-- Isolation Forest -->
+  <div class="col-md-6">
+    <div class="card-section h-100" style="border-left:3px solid var(--blue);margin-bottom:0;">
+      <div class="d-flex align-items-center mb-3 gap-2">
+        <i class="fas fa-tree" style="color:var(--blue);font-size:1.2rem"></i>
+        <span class="fw-bold" style="color:var(--blue)">Isolation Forest</span>
+        <span class="badge ms-auto" style="background:rgba(88,166,255,0.15);color:var(--blue);border:1px solid var(--blue);font-size:0.7rem">Sklearn</span>
+      </div>
+      <!-- Row 1: Volume KPIs -->
+      <div class="row g-2 text-center mb-2">
+        <div class="col-4">
+          <div class="p-2" style="background:var(--bg3);border-radius:8px">
+            <div class="fs-3 fw-bold" style="color:var(--blue)" id="if-total">—</div>
+            <div class="text-muted" style="font-size:0.7rem">Anomalies</div>
+          </div>
+        </div>
+        <div class="col-4">
+          <div class="p-2" style="background:var(--bg3);border-radius:8px">
+            <div class="fs-3 fw-bold" style="color:var(--red)" id="if-critical">—</div>
+            <div class="text-muted" style="font-size:0.7rem">Critiques</div>
+          </div>
+        </div>
+        <div class="col-4">
+          <div class="p-2" style="background:var(--bg3);border-radius:8px">
+            <div class="fs-3 fw-bold" style="color:var(--orange)" id="if-avg">—</div>
+            <div class="text-muted" style="font-size:0.7rem">Score moy.</div>
+          </div>
+        </div>
+      </div>
+      <!-- Row 2: Métriques précision -->
+      <div style="border-top:1px solid var(--border);margin:8px 0;padding-top:8px;">
+        <div style="font-size:0.7rem;color:var(--muted);margin-bottom:6px;text-transform:uppercase;letter-spacing:.5px">Métriques de précision</div>
+        <div class="row g-2 text-center">
+          <div class="col-3">
+            <div class="p-2" style="background:rgba(63,185,80,0.08);border-radius:8px;border:1px solid rgba(63,185,80,0.2)">
+              <div class="fw-bold" style="color:var(--green);font-size:1.1rem" id="if-precision">—</div>
+              <div style="font-size:0.65rem;color:var(--muted)">Precision</div>
+            </div>
+          </div>
+          <div class="col-3">
+            <div class="p-2" style="background:rgba(88,166,255,0.08);border-radius:8px;border:1px solid rgba(88,166,255,0.2)">
+              <div class="fw-bold" style="color:var(--blue);font-size:1.1rem" id="if-recall">—</div>
+              <div style="font-size:0.65rem;color:var(--muted)">Recall</div>
+            </div>
+          </div>
+          <div class="col-3">
+            <div class="p-2" style="background:rgba(210,168,255,0.08);border-radius:8px;border:1px solid rgba(210,168,255,0.2)">
+              <div class="fw-bold" style="color:var(--purple);font-size:1.1rem" id="if-f1">—</div>
+              <div style="font-size:0.65rem;color:var(--muted)">F1 Score</div>
+            </div>
+          </div>
+          <div class="col-3">
+            <div class="p-2" style="background:var(--bg3);border-radius:8px">
+              <div class="fw-bold" style="font-size:0.85rem" id="if-labeled">—</div>
+              <div style="font-size:0.65rem;color:var(--muted)">Vérifiés</div>
+            </div>
+          </div>
+        </div>
+        <div class="d-flex justify-content-center gap-3 mt-2" style="font-size:0.72rem;">
+          <span>TP: <strong style="color:var(--green)" id="if-tp">—</strong></span>
+          <span>FP: <strong style="color:var(--red)" id="if-fp">—</strong></span>
+          <span>FN: <strong style="color:var(--orange)" id="if-fn">—</strong></span>
+        </div>
+      </div>
+      <div class="mt-2">
+        <div style="font-size:0.7rem;color:var(--muted);margin-bottom:4px">Architecture</div>
+        <div class="type-mono" style="font-size:0.72rem">IsolationForest(n_estimators=200, contamination=0.05)</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Autoencoder -->
+  <div class="col-md-6">
+    <div class="card-section h-100" style="border-left:3px solid var(--purple);margin-bottom:0;">
+      <div class="d-flex align-items-center mb-3 gap-2">
+        <i class="fas fa-brain" style="color:var(--purple);font-size:1.2rem"></i>
+        <span class="fw-bold" style="color:var(--purple)">Autoencoder Dense</span>
+        <span class="badge ms-auto" style="background:rgba(210,168,255,0.15);color:var(--purple);border:1px solid var(--purple);font-size:0.7rem">Deep Learning</span>
+      </div>
+      <!-- Row 1: Volume KPIs -->
+      <div class="row g-2 text-center mb-2">
+        <div class="col-4">
+          <div class="p-2" style="background:var(--bg3);border-radius:8px">
+            <div class="fs-3 fw-bold" style="color:var(--purple)" id="dl-total">—</div>
+            <div class="text-muted" style="font-size:0.7rem">Anomalies</div>
+          </div>
+        </div>
+        <div class="col-4">
+          <div class="p-2" style="background:var(--bg3);border-radius:8px">
+            <div class="fs-3 fw-bold" style="color:var(--red)" id="dl-critical">—</div>
+            <div class="text-muted" style="font-size:0.7rem">Critiques</div>
+          </div>
+        </div>
+        <div class="col-4">
+          <div class="p-2" style="background:var(--bg3);border-radius:8px">
+            <div class="fs-3 fw-bold" style="color:var(--orange)" id="dl-avg">—</div>
+            <div class="text-muted" style="font-size:0.7rem">Score moy.</div>
+          </div>
+        </div>
+      </div>
+      <!-- Row 2: Métriques précision -->
+      <div style="border-top:1px solid var(--border);margin:8px 0;padding-top:8px;">
+        <div style="font-size:0.7rem;color:var(--muted);margin-bottom:6px;text-transform:uppercase;letter-spacing:.5px">Métriques de précision</div>
+        <div class="row g-2 text-center">
+          <div class="col-3">
+            <div class="p-2" style="background:rgba(63,185,80,0.08);border-radius:8px;border:1px solid rgba(63,185,80,0.2)">
+              <div class="fw-bold" style="color:var(--green);font-size:1.1rem" id="dl-precision">—</div>
+              <div style="font-size:0.65rem;color:var(--muted)">Precision</div>
+            </div>
+          </div>
+          <div class="col-3">
+            <div class="p-2" style="background:rgba(88,166,255,0.08);border-radius:8px;border:1px solid rgba(88,166,255,0.2)">
+              <div class="fw-bold" style="color:var(--blue);font-size:1.1rem" id="dl-recall">—</div>
+              <div style="font-size:0.65rem;color:var(--muted)">Recall</div>
+            </div>
+          </div>
+          <div class="col-3">
+            <div class="p-2" style="background:rgba(210,168,255,0.08);border-radius:8px;border:1px solid rgba(210,168,255,0.2)">
+              <div class="fw-bold" style="color:var(--purple);font-size:1.1rem" id="dl-f1">—</div>
+              <div style="font-size:0.65rem;color:var(--muted)">F1 Score</div>
+            </div>
+          </div>
+          <div class="col-3">
+            <div class="p-2" style="background:var(--bg3);border-radius:8px">
+              <div class="fw-bold" style="font-size:0.85rem" id="dl-labeled">—</div>
+              <div style="font-size:0.65rem;color:var(--muted)">Vérifiés</div>
+            </div>
+          </div>
+        </div>
+        <div class="d-flex justify-content-center gap-3 mt-2" style="font-size:0.72rem;">
+          <span>TP: <strong style="color:var(--green)" id="dl-tp">—</strong></span>
+          <span>FP: <strong style="color:var(--red)" id="dl-fp">—</strong></span>
+          <span>FN: <strong style="color:var(--orange)" id="dl-fn">—</strong></span>
+        </div>
+      </div>
+      <div class="mt-2">
+        <div style="font-size:0.7rem;color:var(--muted);margin-bottom:4px">Architecture</div>
+        <div class="type-mono" style="font-size:0.72rem">MLPRegressor(16 → 8 → 16) · loss=MSE · seuil=mean+2σ</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Section B — Overlap Analysis -->
+<div class="row g-3 mb-4">
+  <div class="col-md-5">
+    <div class="card-section h-100" style="margin-bottom:0;">
+      <div class="section-title"><i class="fas fa-circle-notch me-2"></i>Analyse de chevauchement</div>
+      <div style="position:relative; height:200px; display:flex; align-items:center; justify-content:center;">
+        <canvas id="overlapChart"></canvas>
+        <div id="overlapCenter" style="position:absolute;text-align:center;pointer-events:none">
+          <div style="font-size:1.5rem;font-weight:700" id="overlap-pct">—</div>
+          <div style="font-size:0.7rem;color:var(--muted)">en commun</div>
+        </div>
+      </div>
+      <div class="d-flex justify-content-around mt-2" style="font-size:0.75rem;">
+        <div class="text-center">
+          <div class="fw-bold" style="color:var(--blue)" id="ov-if-only">—</div>
+          <div class="text-muted">IF seul</div>
+        </div>
+        <div class="text-center">
+          <div class="fw-bold" style="color:#c3e88d" id="ov-both">—</div>
+          <div class="text-muted">IF + DL</div>
+        </div>
+        <div class="text-center">
+          <div class="fw-bold" style="color:var(--purple)" id="ov-dl-only">—</div>
+          <div class="text-muted">DL seul</div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="col-md-7">
+    <div class="card-section h-100" style="margin-bottom:0;">
+      <div class="section-title"><i class="fas fa-info-circle me-2"></i>Interprétation</div>
+      <div id="overlapInterpret" style="font-size:0.82rem;line-height:1.7;color:var(--text)">
+        <i class="fas fa-spinner fa-spin text-muted"></i>
+      </div>
+      <div class="mt-3" style="border-top:1px solid var(--border);padding-top:10px;">
+        <div class="row g-2 text-center" style="font-size:0.75rem;">
+          <div class="col-6">
+            <div style="background:var(--bg3);border-radius:6px;padding:8px">
+              <div style="font-size:0.65rem;color:var(--muted);margin-bottom:4px">Seuil IF</div>
+              <span class="type-mono" style="color:var(--blue)">score ≥ 0.15</span>
+            </div>
+          </div>
+          <div class="col-6">
+            <div style="background:var(--bg3);border-radius:6px;padding:8px">
+              <div style="font-size:0.65rem;color:var(--muted);margin-bottom:4px">Seuil DL</div>
+              <span class="type-mono" style="color:var(--purple)" id="dl-threshold-val">MSE ≥ 0.050</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Section C — Timeline comparative -->
+<div class="row g-3 mb-4">
+  <div class="col-12">
+    <div class="card-section" style="margin-bottom:0;">
+      <div class="section-title"><i class="fas fa-chart-line me-2"></i>Timeline — Anomalies détectées par heure</div>
+      <canvas id="timelineChart" height="80"></canvas>
+    </div>
+  </div>
+</div>
+
+<!-- Section D — Table unifiée des anomalies -->
+<div class="card-section">
+  <div class="d-flex justify-content-between align-items-center mb-3">
+    <h6 class="text-muted mb-0"><i class="fas fa-list me-2"></i>Anomalies récentes — vue unifiée</div>
+    <div class="d-flex gap-2" style="font-size:0.75rem;">
+      <span><span style="background:rgba(88,166,255,0.2);color:var(--blue);padding:2px 8px;border-radius:10px;font-size:0.68rem;">IF</span> Isolation Forest</span>
+      <span><span style="background:rgba(210,168,255,0.2);color:var(--purple);padding:2px 8px;border-radius:10px;font-size:0.68rem;">DL</span> Autoencoder</span>
+      <span><span style="background:rgba(195,232,141,0.2);color:#c3e88d;padding:2px 8px;border-radius:10px;font-size:0.68rem;">IF+DL</span> Les deux</span>
+    </div>
+  </div>
+  <div id="unified-table">
+    <div class="empty-state"><i class="fas fa-spinner fa-spin"></i></div>
+  </div>
+</div>
+
+<!-- Section E — Table de synthèse comparative -->
+<div class="card-section">
+  <div class="section-title"><i class="fas fa-table me-2"></i>Synthèse comparative</div>
+  <table class="table soc-table table-borderless mb-0">
+    <thead>
+      <tr>
+        <th>Critère</th>
+        <th style="color:var(--blue)">Isolation Forest</th>
+        <th style="color:var(--purple)">Autoencoder</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td>Type</td>
+        <td>Non-supervisé (arbres de décision)</td>
+        <td>Non-supervisé (réseau de neurones)</td>
+      </tr>
+      <tr>
+        <td>Méthode détection</td>
+        <td>Score d'isolement (decision_function)</td>
+        <td>Erreur de reconstruction MSE</td>
+      </tr>
+      <tr>
+        <td>Interprétabilité</td>
+        <td><span class="badge-sev sev-low">Moyenne</span></td>
+        <td><span class="badge-sev sev-medium">Faible</span></td>
+      </tr>
+      <tr>
+        <td>Vitesse entraînement</td>
+        <td><span class="badge-sev sev-low">Rapide (&lt;1s)</span></td>
+        <td><span class="badge-sev sev-medium">Moyen (quelques s)</span></td>
+      </tr>
+      <tr>
+        <td>Anomalies fenêtre</td>
+        <td id="synth-if-total">—</td>
+        <td id="synth-dl-total">—</td>
+      </tr>
+      <tr>
+        <td>Score moyen</td>
+        <td id="synth-if-avg">—</td>
+        <td id="synth-dl-avg">—</td>
+      </tr>
+      <tr>
+        <td>Precision</td>
+        <td id="synth-if-prec">—</td>
+        <td id="synth-dl-prec">—</td>
+      </tr>
+      <tr>
+        <td>F1 Score</td>
+        <td id="synth-if-f1">—</td>
+        <td id="synth-dl-f1">—</td>
+      </tr>
+    </tbody>
+  </table>
+</div>
+
+<script>
+let timelineChart = null;
+let overlapChart  = null;
+
+// ─── Unified anomaly table ────────────────────────────────────────────────────
+function renderUnifiedTable(ifItems, dlItems) {
+  const el = document.getElementById('unified-table');
+
+  // Build map: src_ip+window5min → {if: item, dl: item}
+  const buckets = {};
+  const bucket5 = ts => {
+    const d = new Date(ts);
+    d.setSeconds(0); d.setMilliseconds(0);
+    d.setMinutes(Math.floor(d.getMinutes() / 5) * 5);
+    return (d.toISOString().slice(0, 15) + '0') + '_' + ''; // key w/o ip first
+  };
+
+  const rows = [];
+
+  // Build IF set keyed by (ip, 5-min bucket)
+  const ifMap = {};
+  for (const a of ifItems) {
+    const key = (a.src_ip || '') + '|' + bucket5(a['@timestamp'] || '');
+    ifMap[key] = a;
+  }
+
+  // Match DL against IF, collect both
+  const seen = new Set();
+  for (const d of dlItems) {
+    const key = (d.src_ip || '') + '|' + bucket5(d['@timestamp'] || '');
+    if (ifMap[key]) {
+      rows.push({ ts: d['@timestamp'], ip: d.src_ip, scoreIF: ifMap[key].anomaly_score, scoreDL: d.anomaly_score, sev: d.severity || ifMap[key].severity, type: d.log_type || ifMap[key].log_type, tag: 'both' });
+      seen.add(key);
+    } else {
+      rows.push({ ts: d['@timestamp'], ip: d.src_ip, scoreIF: null, scoreDL: d.anomaly_score, sev: d.severity, type: d.log_type, tag: 'dl' });
+    }
+  }
+  for (const a of ifItems) {
+    const key = (a.src_ip || '') + '|' + bucket5(a['@timestamp'] || '');
+    if (!seen.has(key)) {
+      rows.push({ ts: a['@timestamp'], ip: a.src_ip, scoreIF: a.anomaly_score, scoreDL: null, sev: a.severity, type: a.log_type, tag: 'if' });
+    }
+  }
+
+  rows.sort((a, b) => (b.ts || '').localeCompare(a.ts || ''));
+  const top30 = rows.slice(0, 30);
+
+  if (top30.length === 0) {
+    el.innerHTML = '<div class="empty-state text-muted small">Aucune anomalie sur cette fenêtre</div>';
+    return;
+  }
+
+  let html = `<table class="table soc-table table-borderless mb-0 small"><thead><tr>
+    <th>Timestamp</th><th>IP source</th><th>Score IF</th><th>Score DL</th><th>Sévérité</th><th>Type</th><th>Détecté par</th>
+  </tr></thead><tbody>`;
+
+  for (const r of top30) {
+    const ts = (r.ts || '').replace('T', ' ').slice(0, 16);
+    const sev = r.sev || 'medium';
+    let badge, badgeColor;
+    if (r.tag === 'both') {
+      badge = 'IF+DL'; badgeColor = 'background:rgba(195,232,141,0.2);color:#c3e88d;border:1px solid #c3e88d';
+    } else if (r.tag === 'if') {
+      badge = 'IF'; badgeColor = 'background:rgba(88,166,255,0.2);color:var(--blue);border:1px solid var(--blue)';
+    } else {
+      badge = 'DL'; badgeColor = 'background:rgba(210,168,255,0.2);color:var(--purple);border:1px solid var(--purple)';
+    }
+    const scoreIF = r.scoreIF != null ? `<b style="color:var(--blue)">${r.scoreIF.toFixed(3)}</b>` : '<span class="text-muted">—</span>';
+    const scoreDL = r.scoreDL != null ? `<b style="color:var(--purple)">${r.scoreDL.toFixed(3)}</b>` : '<span class="text-muted">—</span>';
+    html += `<tr>
+      <td class="text-muted">${ts}</td>
+      <td><code>${r.ip || '—'}</code></td>
+      <td>${scoreIF}</td>
+      <td>${scoreDL}</td>
+      <td><span class="badge-sev sev-${sev}">${sev}</span></td>
+      <td><span class="type-mono">${r.type || '—'}</span></td>
+      <td><span style="padding:2px 8px;border-radius:10px;font-size:0.7rem;${badgeColor}">${badge}</span></td>
+    </tr>`;
+  }
+  html += '</tbody></table>';
+  el.innerHTML = html;
+}
+
+// ─── Overlap donut ────────────────────────────────────────────────────────────
+function renderOverlapChart(ifOnly, both, dlOnly) {
+  const ctx = document.getElementById('overlapChart').getContext('2d');
+  const total = ifOnly + both + dlOnly || 1;
+  const pct = Math.round(both / total * 100);
+  document.getElementById('overlap-pct').textContent = pct + '%';
+  document.getElementById('ov-if-only').textContent  = ifOnly;
+  document.getElementById('ov-both').textContent     = both;
+  document.getElementById('ov-dl-only').textContent  = dlOnly;
+
+  if (overlapChart) overlapChart.destroy();
+  overlapChart = new Chart(ctx, {
+    type: 'doughnut',
+    data: {
+      labels: ['IF seul', 'IF + DL', 'DL seul'],
+      datasets: [{
+        data: [ifOnly, both, dlOnly],
+        backgroundColor: ['rgba(88,166,255,0.7)', 'rgba(195,232,141,0.7)', 'rgba(210,168,255,0.7)'],
+        borderColor: ['#58a6ff', '#c3e88d', '#d2a8ff'],
+        borderWidth: 2
+      }]
+    },
+    options: {
+      cutout: '65%',
+      plugins: {
+        legend: { display: false },
+        tooltip: { callbacks: { label: ctx => ` ${ctx.label}: ${ctx.raw} (${Math.round(ctx.raw/total*100)}%)` } }
+      }
+    }
+  });
+
+  // Interpretation text
+  const interpret = document.getElementById('overlapInterpret');
+  let txt = '';
+  if (total <= 1) {
+    txt = '<span class="text-muted">Pas assez d\'anomalies sur cette fenêtre pour calculer le chevauchement.</span>';
+  } else if (pct >= 50) {
+    txt = `<i class="fas fa-check-circle me-1" style="color:var(--green)"></i><strong>${pct}%</strong> des anomalies sont détectées par les deux modèles — forte <strong>concordance</strong>, les alertes sont probablement fiables.<br><br>
+    <i class="fas fa-info-circle me-1 text-muted"></i>Un chevauchement élevé confirme que les deux approches (isolation structurelle vs reconstruction DL) signalent les mêmes comportements suspects.`;
+  } else if (pct >= 20) {
+    txt = `<i class="fas fa-exclamation-circle me-1" style="color:var(--orange)"></i><strong>${pct}%</strong> de concordance — chevauchement <strong>modéré</strong>. Les deux modèles détectent des patterns partiellement différents.<br><br>
+    <i class="fas fa-info-circle me-1 text-muted"></i>Recommandé : investiguer les anomalies "IF seul" (${ifOnly}) et "DL seul" (${dlOnly}) séparément pour comprendre les divergences.`;
+  } else {
+    txt = `<i class="fas fa-times-circle me-1" style="color:var(--red)"></i><strong>${pct}%</strong> de concordance — les modèles détectent des <strong>anomalies très différentes</strong>.<br><br>
+    <i class="fas fa-info-circle me-1 text-muted"></i>Vérifier la cohérence des features et des seuils. Un faible overlap peut indiquer un sur-ajustement d'un des modèles ou des fenêtres de détection désynchronisées.`;
+  }
+  interpret.innerHTML = txt;
+}
+
+// ─── Timeline ────────────────────────────────────────────────────────────────
+function renderTimeline(data) {
+  const ctx = document.getElementById('timelineChart').getContext('2d');
+  const ifData = data.isolation_forest.timeline;
+  const dlData = data.autoencoder.timeline;
+  const labels = [...new Set([...ifData.map(d=>d.time), ...dlData.map(d=>d.time)])].sort();
+  const ifMap  = Object.fromEntries(ifData.map(d=>[d.time, d.count]));
+  const dlMap  = Object.fromEntries(dlData.map(d=>[d.time, d.count]));
+
+  if (timelineChart) timelineChart.destroy();
+  timelineChart = new Chart(ctx, {
+    type: 'line',
+    data: {
+      labels: labels.map(l => l.replace('T',' ').slice(0,16)),
+      datasets: [
+        { label: 'Isolation Forest', data: labels.map(l => ifMap[l]||0), borderColor: '#58a6ff', backgroundColor: 'rgba(88,166,255,0.1)', tension: 0.3, fill: true, pointRadius: 3 },
+        { label: 'Autoencoder', data: labels.map(l => dlMap[l]||0), borderColor: '#d2a8ff', backgroundColor: 'rgba(210,168,255,0.1)', tension: 0.3, fill: true, pointRadius: 3 }
+      ]
+    },
+    options: {
+      responsive: true,
+      plugins: { legend: { labels: { color: '#c9d1d9' } } },
+      scales: {
+        x: { ticks: { color: '#8b949e', maxTicksLimit: 10 }, grid: { color: '#21262d' } },
+        y: { ticks: { color: '#8b949e' }, grid: { color: '#21262d' }, beginAtZero: true }
+      }
+    }
+  });
+}
+
+// ─── Metrics helpers ──────────────────────────────────────────────────────────
+function pct(val) { return val != null ? (val * 100).toFixed(1) + '%' : 'N/A'; }
+function num(val) { return val != null ? val : '—'; }
+
+// ─── Main load ────────────────────────────────────────────────────────────────
+async function loadData() {
+  const win = document.getElementById('windowSelect').value;
+  try {
+    const [compareRes, ifMetRes, dlMetRes, overlapRes] = await Promise.all([
+      fetch(`/api/compare?window=${win}`),
+      fetch(`/api/ia/metrics?window=${win}`),
+      fetch(`/api/dl/metrics?window=${win}`),
+      fetch(`/api/compare/overlap?window=${win}`)
+    ]);
+
+    const cmp     = await compareRes.json();
+    const ifMet   = await ifMetRes.json();
+    const dlMet   = await dlMetRes.json();
+    const overlap = await overlapRes.json();
+
+    const IF = cmp.isolation_forest;
+    const DL = cmp.autoencoder;
+
+    // Volume KPIs
+    document.getElementById('if-total').textContent    = IF.total;
+    document.getElementById('if-critical').textContent = IF.critical;
+    document.getElementById('if-avg').textContent      = IF.avg_score.toFixed(3);
+    document.getElementById('dl-total').textContent    = DL.total;
+    document.getElementById('dl-critical').textContent = DL.critical;
+    document.getElementById('dl-avg').textContent      = DL.avg_score.toFixed(3);
+
+    // Precision metrics
+    document.getElementById('if-precision').textContent = pct(ifMet.precision);
+    document.getElementById('if-recall').textContent    = pct(ifMet.recall);
+    document.getElementById('if-f1').textContent        = ifMet.f1 != null ? ifMet.f1.toFixed(3) : 'N/A';
+    document.getElementById('if-labeled').textContent   = `${ifMet.tp + ifMet.fp} / ${IF.total}`;
+    document.getElementById('if-tp').textContent        = num(ifMet.tp);
+    document.getElementById('if-fp').textContent        = num(ifMet.fp);
+    document.getElementById('if-fn').textContent        = `${num(ifMet.fn)} est.`;
+
+    document.getElementById('dl-precision').textContent = pct(dlMet.precision);
+    document.getElementById('dl-recall').textContent    = pct(dlMet.recall);
+    document.getElementById('dl-f1').textContent        = dlMet.f1 != null ? dlMet.f1.toFixed(3) : 'N/A';
+    document.getElementById('dl-labeled').textContent   = `${dlMet.tp + dlMet.fp} / ${DL.total}`;
+    document.getElementById('dl-tp').textContent        = num(dlMet.tp);
+    document.getElementById('dl-fp').textContent        = num(dlMet.fp);
+    document.getElementById('dl-fn').textContent        = `${num(dlMet.fn)} est.`;
+
+    // Synthèse table
+    document.getElementById('synth-if-total').textContent = IF.total;
+    document.getElementById('synth-dl-total').textContent = DL.total;
+    document.getElementById('synth-if-avg').textContent   = IF.avg_score.toFixed(3);
+    document.getElementById('synth-dl-avg').textContent   = DL.avg_score.toFixed(3);
+    document.getElementById('synth-if-prec').textContent  = pct(ifMet.precision);
+    document.getElementById('synth-dl-prec').textContent  = pct(dlMet.precision);
+    document.getElementById('synth-if-f1').textContent    = ifMet.f1 != null ? ifMet.f1.toFixed(3) : 'N/A';
+    document.getElementById('synth-dl-f1').textContent    = dlMet.f1 != null ? dlMet.f1.toFixed(3) : 'N/A';
+
+    // DL threshold
+    if (dlMet.threshold != null) {
+      document.getElementById('dl-threshold-val').textContent = `MSE ≥ ${dlMet.threshold.toFixed(3)}`;
+    }
+
+    // Overlap
+    renderOverlapChart(overlap.if_only, overlap.both, overlap.dl_only);
+
+    // Timeline + unified table
+    renderTimeline(cmp);
+    renderUnifiedTable(IF.recent || [], DL.recent || []);
+
+    document.getElementById('last-update').textContent = 'Mis à jour ' + new Date().toLocaleTimeString();
+  } catch(e) {
+    console.error('loadData error:', e);
+  }
+}
+
+document.getElementById('windowSelect').addEventListener('change', () => { loadData(); loadModels(); });
+loadData();
+setInterval(loadData, 30000);
+
+async function loadModels() {
+  try {
+    const w = document.getElementById('windowSelect').value;
+    const d = await fetch(`/api/compare/models?window=${w}`).then(r => r.json());
+    const RF = d.rf, IF2 = d.if, ENS = d.ensemble;
+    document.getElementById('rf-alerts').textContent  = RF.alerts;
+    document.getElementById('rf-f1').textContent      = RF.f1     != null ? (RF.f1     * 100).toFixed(0) + '%' : '—';
+    document.getElementById('rf-prec').textContent    = RF.precision != null ? (RF.precision * 100).toFixed(0) + '%' : '—';
+    document.getElementById('rf-recall').textContent  = RF.recall != null ? (RF.recall  * 100).toFixed(0) + '%' : '—';
+    document.getElementById('rf-trained').textContent = RF.trained_at || '—';
+    document.getElementById('rf-maxscore').textContent = RF.max_score.toFixed(3);
+    document.getElementById('if-alerts2').textContent = IF2.alerts;
+    document.getElementById('ens-alerts').textContent = ENS.alerts;
+    const weights = {rf: ENS.weights.RF, if: ENS.weights.IF, dl: ENS.weights.DL, rate: ENS.weights.Rate};
+    for (const [k, v] of Object.entries(weights)) {
+      const bar = document.getElementById('w-' + k);
+      const pct = document.getElementById('w-' + k + '-pct');
+      if (bar) bar.style.width = (v * 100) + '%';
+      if (pct) pct.textContent = Math.round(v * 100) + '%';
+    }
+  } catch(e) { console.error('loadModels error:', e); }
+}
+loadModels();
+setInterval(loadModels, 30000);
+</script>
+
+<!-- Panel RF vs IF -->
+<div class="card-section mt-4">
+  <div class="section-title"><i class="fas fa-balance-scale me-1"></i>Random Forest supervisé vs Isolation Forest non-supervisé</div>
+  <div class="row g-3">
+    <div class="col-md-4">
+      <div class="card-section h-100" style="border-left:3px solid var(--green);margin-bottom:0;">
+        <div class="d-flex align-items-center gap-2 mb-2">
+          <i class="fas fa-check-double" style="color:var(--green)"></i>
+          <span style="font-weight:700;color:var(--green)">Random Forest</span>
+          <span class="ms-auto" style="font-size:0.68rem;background:rgba(63,185,80,0.15);color:var(--green);padding:2px 8px;border-radius:8px;border:1px solid var(--green)">supervisé</span>
+        </div>
+        <div class="row g-2 text-center mb-2">
+          <div class="col-4"><div style="font-size:1.5rem;font-weight:700;color:var(--green)" id="rf-f1">—</div><div style="font-size:0.68rem;color:var(--muted)">F1-Score</div></div>
+          <div class="col-4"><div style="font-size:1.5rem;font-weight:700;color:var(--blue)" id="rf-prec">—</div><div style="font-size:0.68rem;color:var(--muted)">Précision</div></div>
+          <div class="col-4"><div style="font-size:1.5rem;font-weight:700;color:var(--orange)" id="rf-recall">—</div><div style="font-size:0.68rem;color:var(--muted)">Rappel</div></div>
+        </div>
+        <div style="font-size:0.76rem;color:var(--muted);margin-bottom:8px;">8245 logs d'entraînement · 100 arbres</div>
+        <div class="d-flex justify-content-between" style="font-size:0.78rem;"><span style="color:var(--muted)">Alertes</span><strong id="rf-alerts">—</strong></div>
+        <div class="d-flex justify-content-between" style="font-size:0.78rem;"><span style="color:var(--muted)">Score max</span><strong id="rf-maxscore">—</strong></div>
+        <div class="d-flex justify-content-between" style="font-size:0.78rem;"><span style="color:var(--muted)">Entraîné le</span><strong id="rf-trained">—</strong></div>
+      </div>
+    </div>
+    <div class="col-md-4">
+      <div class="card-section h-100" style="border-left:3px solid var(--blue);margin-bottom:0;">
+        <div class="d-flex align-items-center gap-2 mb-2">
+          <i class="fas fa-tree" style="color:var(--blue)"></i>
+          <span style="font-weight:700;color:var(--blue)">Isolation Forest</span>
+          <span class="ms-auto" style="font-size:0.68rem;background:rgba(88,166,255,0.15);color:var(--blue);padding:2px 8px;border-radius:8px;border:1px solid var(--blue)">non-supervisé</span>
+        </div>
+        <div class="row g-2 text-center mb-2">
+          <div class="col-4"><div style="font-size:1.5rem;font-weight:700;color:var(--muted)">N/A</div><div style="font-size:0.68rem;color:var(--muted)">F1-Score</div></div>
+          <div class="col-4"><div style="font-size:1.5rem;font-weight:700;color:var(--muted)">N/A</div><div style="font-size:0.68rem;color:var(--muted)">Précision</div></div>
+          <div class="col-4"><div style="font-size:1.5rem;font-weight:700;color:var(--muted)">N/A</div><div style="font-size:0.68rem;color:var(--muted)">Rappel</div></div>
+        </div>
+        <div style="font-size:0.76rem;color:var(--muted);margin-bottom:8px;">Détection par anomalie · pas de labels requis</div>
+        <div class="d-flex justify-content-between" style="font-size:0.78rem;"><span style="color:var(--muted)">Alertes</span><strong id="if-alerts2">—</strong></div>
+        <div class="d-flex justify-content-between" style="font-size:0.78rem;"><span style="color:var(--muted)">Avantage</span><strong>Détecte l'inconnu</strong></div>
+      </div>
+    </div>
+    <div class="col-md-4">
+      <div class="card-section h-100" style="border-left:3px solid var(--purple);margin-bottom:0;">
+        <div class="d-flex align-items-center gap-2 mb-2">
+          <i class="fas fa-vote-yea" style="color:var(--purple)"></i>
+          <span style="font-weight:700;color:var(--purple)">Ensemble (4 modèles)</span>
+        </div>
+        <div class="d-flex justify-content-between mb-3" style="font-size:0.78rem;">
+          <span style="color:var(--muted)">Alertes finales (≥2 votes)</span><strong id="ens-alerts">—</strong>
+        </div>
+        <div style="font-size:0.72rem;color:var(--muted);margin-bottom:6px;">Poids par modèle</div>
+        <div class="d-flex align-items-center gap-2 mb-2" style="font-size:0.72rem;">
+          <span style="width:34px;color:var(--green);font-weight:600;">RF</span>
+          <div style="flex:1;background:var(--bg3);border-radius:4px;height:10px;"><div id="w-rf" style="height:100%;background:var(--green);border-radius:4px;width:0;transition:width .5s;"></div></div>
+          <span style="width:32px;text-align:right;color:var(--muted)" id="w-rf-pct">—</span>
+        </div>
+        <div class="d-flex align-items-center gap-2 mb-2" style="font-size:0.72rem;">
+          <span style="width:34px;color:var(--blue);font-weight:600;">IF</span>
+          <div style="flex:1;background:var(--bg3);border-radius:4px;height:10px;"><div id="w-if" style="height:100%;background:var(--blue);border-radius:4px;width:0;transition:width .5s;"></div></div>
+          <span style="width:32px;text-align:right;color:var(--muted)" id="w-if-pct">—</span>
+        </div>
+        <div class="d-flex align-items-center gap-2 mb-2" style="font-size:0.72rem;">
+          <span style="width:34px;color:var(--orange);font-weight:600;">DL</span>
+          <div style="flex:1;background:var(--bg3);border-radius:4px;height:10px;"><div id="w-dl" style="height:100%;background:var(--orange);border-radius:4px;width:0;transition:width .5s;"></div></div>
+          <span style="width:32px;text-align:right;color:var(--muted)" id="w-dl-pct">—</span>
+        </div>
+        <div class="d-flex align-items-center gap-2" style="font-size:0.72rem;">
+          <span style="width:34px;color:var(--yellow);font-weight:600;">Rate</span>
+          <div style="flex:1;background:var(--bg3);border-radius:4px;height:10px;"><div id="w-rate" style="height:100%;background:var(--yellow);border-radius:4px;width:0;transition:width .5s;"></div></div>
+          <span style="width:32px;text-align:right;color:var(--muted)" id="w-rate-pct">—</span>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+{% endblock %}

@@ -1,0 +1,80 @@
+{% extends "base.html" %}
+{% block title %}Audit Trail{% endblock %}
+{% block content %}
+
+<div class="d-flex align-items-center justify-content-between mb-3 flex-wrap gap-2">
+  <div>
+    <div style="font-size:1.1rem; font-weight:600;">
+      <i class="fas fa-clipboard-list me-2" style="color:var(--orange);"></i>Audit Trail
+    </div>
+    <div style="font-size:0.78rem; color:var(--muted);">Journal complet des actions — NIST GV.AT / DE.CM</div>
+  </div>
+  <div class="d-flex gap-2">
+    <input type="text" id="filterInput" placeholder="Filtrer (action, user, IP…)"
+           oninput="filterRows()"
+           style="background:var(--bg3);border:1px solid var(--border);color:var(--text);border-radius:6px;padding:6px 12px;font-size:0.8rem;width:220px;outline:none;">
+    <a href="/admin/users" class="btn-soc" style="font-size:0.8rem;">
+      <i class="fas fa-users-cog me-1"></i>Utilisateurs
+    </a>
+  </div>
+</div>
+
+<div class="card-section p-0">
+  <table style="width:100%; border-collapse:collapse; font-size:0.82rem;" id="auditTable">
+    <thead>
+      <tr style="background:var(--bg3);">
+        <th style="padding:10px 14px; color:var(--muted); font-weight:500; border-bottom:1px solid var(--border); width:160px;">Horodatage</th>
+        <th style="padding:10px 14px; color:var(--muted); font-weight:500; border-bottom:1px solid var(--border); width:150px;">Action</th>
+        <th style="padding:10px 14px; color:var(--muted); font-weight:500; border-bottom:1px solid var(--border); width:110px;">Utilisateur</th>
+        <th style="padding:10px 14px; color:var(--muted); font-weight:500; border-bottom:1px solid var(--border); width:120px;">Niveau</th>
+        <th style="padding:10px 14px; color:var(--muted); font-weight:500; border-bottom:1px solid var(--border); width:120px;">IP</th>
+        <th style="padding:10px 14px; color:var(--muted); font-weight:500; border-bottom:1px solid var(--border);">Détails</th>
+      </tr>
+    </thead>
+    <tbody id="auditBody">
+      {% for ev in events %}
+      {% set action_color = {
+        'login': 'var(--green)', 'login_fail': 'var(--red)', 'login_mfa_fail': 'var(--red)',
+        'logout': 'var(--muted)', 'password_change': 'var(--orange)',
+        'incident_update': 'var(--blue)', 'incident_note': 'var(--blue)',
+        'auto_mitigate': 'var(--red)', 'mitigate_unblock': 'var(--orange)',
+        'totp_verified': 'var(--green)', 'totp_disabled': 'var(--orange)',
+      }.get(ev.action, 'var(--text)') %}
+      <tr style="border-bottom:1px solid var(--border);">
+        <td style="padding:8px 14px; font-family:monospace; font-size:0.75rem; color:var(--muted);">
+          {{ ev.get('@timestamp','')[:19].replace('T',' ') }}
+        </td>
+        <td style="padding:8px 14px;">
+          <span style="font-size:0.76rem; font-weight:600; color:{{ action_color }};">{{ ev.action }}</span>
+        </td>
+        <td style="padding:8px 14px; font-family:monospace; font-size:0.78rem; color:var(--text);">{{ ev.username or '—' }}</td>
+        <td style="padding:8px 14px;">
+          {% if ev.level %}
+          <span class="badge-level badge-{{ ev.level }}">{{ ev.level }}</span>
+          {% else %}—{% endif %}
+        </td>
+        <td style="padding:8px 14px; font-family:monospace; font-size:0.75rem; color:var(--muted);">{{ ev.ip or '—' }}</td>
+        <td style="padding:8px 14px; font-size:0.76rem; color:var(--muted);">
+          {% if ev.details %}
+            {% for k,v in ev.details.items() %}
+              <span style="margin-right:10px;"><span style="color:var(--text);">{{ k }}</span>: {{ v }}</span>
+            {% endfor %}
+          {% else %}—{% endif %}
+        </td>
+      </tr>
+      {% else %}
+      <tr><td colspan="6" style="padding:30px; text-align:center; color:var(--muted);">Aucun événement</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+
+<script>
+function filterRows() {
+  const q = document.getElementById('filterInput').value.toLowerCase();
+  document.querySelectorAll('#auditBody tr').forEach(row => {
+    row.style.display = row.textContent.toLowerCase().includes(q) ? '' : 'none';
+  });
+}
+</script>
+{% endblock %}

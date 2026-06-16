@@ -1,0 +1,196 @@
+{% extends "base.html" %}
+{% block title %}Notifications — Mini-SOC{% endblock %}
+{% block content %}
+<style>
+  .notif-page-card {
+    background: var(--bg2); border: 1px solid var(--border);
+    border-radius: 10px; overflow: hidden;
+  }
+  .notif-page-header {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 14px 20px; border-bottom: 1px solid var(--border);
+    background: var(--bg3);
+  }
+  .notif-row {
+    display: flex; align-items: flex-start; gap: 12px;
+    padding: 12px 18px; border-bottom: 1px solid rgba(255,255,255,0.04);
+    transition: background 0.15s; cursor: default;
+  }
+  .notif-row:hover { background: var(--bg3); }
+  .notif-row.unread { border-left: 3px solid var(--red); }
+  .notif-row.unread.sev-high   { border-left-color: var(--orange); }
+  .notif-row.unread.sev-medium { border-left-color: var(--yellow); }
+  .notif-row.unread.sev-low    { border-left-color: var(--green); }
+  .notif-row.read   { opacity: 0.6; border-left: 3px solid transparent; }
+  .ni-icon {
+    width: 32px; height: 32px; border-radius: 8px;
+    display: flex; align-items: center; justify-content: center;
+    flex-shrink: 0; font-size: 0.8rem;
+  }
+  .ni-critical { background: rgba(255,71,87,0.12);  color: var(--red);    border: 1px solid rgba(255,71,87,0.3); }
+  .ni-warning  { background: rgba(255,107,53,0.1);  color: var(--orange); border: 1px solid rgba(255,107,53,0.3); }
+  .ni-info     { background: rgba(0,217,255,0.08);  color: var(--cyan);   border: 1px solid rgba(0,217,255,0.25); }
+  .ni-msg      { font-size: 0.82rem; color: var(--text2); line-height: 1.4; flex: 1; }
+  .ni-meta     { font-size: 0.65rem; color: var(--muted); margin-top: 4px;
+                 font-family: 'JetBrains Mono', monospace; display: flex; gap: 10px; flex-wrap: wrap; }
+  .ni-badge    { padding: 1px 7px; border-radius: 4px; font-size: 0.62rem; font-weight: 700; }
+  .badge-crit  { background: rgba(255,71,87,0.15); color: var(--red); }
+  .badge-high  { background: rgba(255,107,53,0.15); color: var(--orange); }
+  .badge-med   { background: rgba(255,215,0,0.15);  color: var(--yellow); }
+  .badge-low   { background: rgba(159,239,0,0.12);  color: var(--green); }
+  .filter-btn  {
+    padding: 4px 12px; border-radius: 5px; font-size: 0.7rem; cursor: pointer;
+    border: 1px solid var(--border); background: var(--bg3); color: var(--muted);
+    transition: all 0.15s;
+  }
+  .filter-btn.active, .filter-btn:hover {
+    border-color: var(--cyan); color: var(--cyan);
+    background: rgba(0,217,255,0.07);
+  }
+  .empty-state {
+    padding: 60px 20px; text-align: center; color: var(--muted);
+  }
+  .empty-state i { font-size: 2rem; margin-bottom: 12px; display: block; }
+</style>
+
+<div class="page-header">
+  <div>
+    <h1 class="page-title"><i class="fas fa-bell" style="color:var(--cyan);margin-right:10px;"></i>Notifications</h1>
+    <p class="page-subtitle">Historique complet de vos notifications in-app</p>
+  </div>
+  <div style="display:flex;gap:8px;align-items:center;">
+    <span id="total-badge" style="font-size:0.72rem;padding:4px 12px;border-radius:20px;background:rgba(0,217,255,0.08);color:var(--cyan);border:1px solid rgba(0,217,255,0.2);font-family:'JetBrains Mono',monospace;">— notifs</span>
+    <button onclick="markAllRead()" class="btn-secondary" style="font-size:0.72rem;padding:5px 14px;">
+      <i class="fas fa-check-double me-1"></i>Tout marquer lu
+    </button>
+  </div>
+</div>
+
+<div class="notif-page-card">
+  <!-- Filtres -->
+  <div style="display:flex;align-items:center;gap:8px;padding:12px 18px;border-bottom:1px solid var(--border);background:var(--bg3);flex-wrap:wrap;">
+    <span style="font-size:0.68rem;color:var(--muted);margin-right:4px;">Filtrer :</span>
+    <button class="filter-btn active" onclick="setFilter('all', this)">Tout</button>
+    <button class="filter-btn" onclick="setFilter('unread', this)">Non lues</button>
+    <button class="filter-btn" onclick="setFilter('read', this)">Lues</button>
+    <div style="flex:1;"></div>
+    <span style="font-size:0.65rem;color:var(--muted);font-family:'JetBrains Mono',monospace;">
+      <i class="fas fa-clock me-1"></i>Temps réel — <span id="last-refresh">—</span>
+    </span>
+  </div>
+
+  <!-- Liste -->
+  <div id="notif-history-list">
+    <div class="empty-state">
+      <i class="fas fa-spinner fa-spin"></i>
+      <div>Chargement…</div>
+    </div>
+  </div>
+
+  <!-- Pagination -->
+  <div id="pagination-bar" style="display:none;padding:10px 18px;border-top:1px solid var(--border);background:var(--bg3);display:flex;align-items:center;justify-content:center;gap:10px;">
+    <button id="prev-btn" onclick="changePage(-1)" class="filter-btn"><i class="fas fa-chevron-left"></i></button>
+    <span id="page-info" style="font-size:0.7rem;color:var(--muted);font-family:'JetBrains Mono',monospace;"></span>
+    <button id="next-btn" onclick="changePage(1)" class="filter-btn"><i class="fas fa-chevron-right"></i></button>
+  </div>
+</div>
+
+<script>
+let allNotifs = [];
+let currentFilter = 'all';
+let currentPage = 1;
+const PAGE_SIZE = 50;
+
+async function loadHistory() {
+  const r = await fetch(`/api/notifications/history?page=${currentPage}`).then(x => x.json());
+  allNotifs = r.notifications || [];
+  document.getElementById('total-badge').textContent = `${r.total} notifs`;
+  document.getElementById('last-refresh').textContent = new Date().toLocaleTimeString('fr-FR');
+  renderList();
+}
+
+function setFilter(f, btn) {
+  currentFilter = f;
+  document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  renderList();
+}
+
+function renderList() {
+  const list = document.getElementById('notif-history-list');
+  let items = allNotifs;
+  if (currentFilter === 'unread') items = items.filter(n => !n.read);
+  if (currentFilter === 'read')   items = items.filter(n => n.read);
+
+  if (!items.length) {
+    list.innerHTML = `<div class="empty-state"><i class="fas fa-bell-slash"></i><div>Aucune notification${currentFilter !== 'all' ? ' dans ce filtre' : ''}</div></div>`;
+    return;
+  }
+
+  const icons = { critical: 'fas fa-exclamation-circle', warning: 'fas fa-exclamation-triangle', info: 'fas fa-info-circle' };
+  const sevBadge = {
+    critical: '<span class="ni-badge badge-crit">CRITICAL</span>',
+    high:     '<span class="ni-badge badge-high">HIGH</span>',
+    medium:   '<span class="ni-badge badge-med">MEDIUM</span>',
+    low:      '<span class="ni-badge badge-low">LOW</span>',
+  };
+
+  list.innerHTML = items.map(n => {
+    const t = n.type || 'info';
+    const sev = (n.severity || '').toLowerCase();
+    const rowClass = n.read ? 'read' : `unread sev-${sev}`;
+    const iconClass = `ni-${t}`;
+    const icon = icons[t] || 'fas fa-bell';
+    const incLink = n.incident_id
+      ? `<a href="/incident/${n.incident_id}" style="color:var(--cyan);font-size:0.65rem;font-family:'JetBrains Mono',monospace;" onclick="event.stopPropagation()"><i class="fas fa-link me-1"></i>${n.incident_id}</a>`
+      : '';
+    const badge = sevBadge[sev] || '';
+    const readIcon = n.read
+      ? '<i class="fas fa-check-circle" title="Lu" style="color:var(--green);font-size:0.65rem;"></i>'
+      : '<i class="fas fa-circle" title="Non lu" style="color:var(--red);font-size:0.65rem;"></i>';
+    return `
+      <div class="notif-row ${rowClass}" onclick="markOne('${n.id}', this)">
+        <div class="ni-icon ${iconClass}"><i class="${icon}"></i></div>
+        <div style="flex:1;min-width:0;">
+          <div class="ni-msg">${n.message}</div>
+          <div class="ni-meta">
+            <span><i class="fas fa-clock me-1"></i>${n.ts}</span>
+            ${badge}
+            ${incLink}
+            ${readIcon}
+          </div>
+        </div>
+      </div>`;
+  }).join('');
+}
+
+async function markOne(id, row) {
+  await fetch('/api/notifications/read', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({ id })
+  });
+  row.classList.remove('unread', 'sev-critical', 'sev-high', 'sev-medium', 'sev-low');
+  row.classList.add('read');
+  const icon = row.querySelector('.fa-circle');
+  if (icon) { icon.className = 'fas fa-check-circle'; icon.style.color = 'var(--green)'; }
+}
+
+async function markAllRead() {
+  await fetch('/api/notifications/read', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({})
+  });
+  await loadHistory();
+}
+
+function changePage(delta) {
+  currentPage += delta;
+  loadHistory();
+}
+
+loadHistory();
+setInterval(loadHistory, 30000);
+</script>
+{% endblock %}

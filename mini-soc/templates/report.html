@@ -1,0 +1,579 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Rapport de Sécurité — Mini-SOC</title>
+  <style>
+    :root {
+      --blue: #58a6ff;
+      --green: #3fb950;
+      --red: #f85149;
+      --orange: #ffa657;
+      --yellow: #e3b341;
+      --purple: #d2a8ff;
+      --bg: #0d1117;
+      --bg2: #161b22;
+      --bg3: #21262d;
+      --text: #c9d1d9;
+      --muted: #8b949e;
+      --border: #30363d;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: 'Segoe UI', system-ui, sans-serif;
+      font-size: 14px;
+      line-height: 1.6;
+    }
+
+    /* ─── Print toolbar (hidden on print) ─── */
+    #toolbar {
+      position: sticky; top: 0; z-index: 100;
+      background: var(--bg2); border-bottom: 1px solid var(--border);
+      padding: 12px 32px;
+      display: flex; justify-content: space-between; align-items: center;
+    }
+    #toolbar h6 { color: var(--text); font-size: 0.9rem; margin: 0; }
+    .print-btn {
+      background: var(--blue); color: #fff;
+      border: none; border-radius: 8px;
+      padding: 8px 22px; font-size: 0.85rem; cursor: pointer; font-weight: 600;
+    }
+    .print-btn:hover { opacity: 0.9; }
+
+    /* ─── Report container ─── */
+    #report {
+      max-width: 900px;
+      margin: 0 auto;
+      padding: 40px 40px 60px;
+    }
+
+    /* ─── Header ─── */
+    .report-header {
+      display: flex; justify-content: space-between; align-items: flex-start;
+      border-bottom: 2px solid var(--blue); padding-bottom: 20px; margin-bottom: 32px;
+    }
+    .report-logo { display: flex; align-items: center; gap: 12px; }
+    .report-logo-icon {
+      width: 44px; height: 44px; border-radius: 10px;
+      background: rgba(88,166,255,0.15); border: 1px solid var(--blue);
+      display: flex; align-items: center; justify-content: center;
+      font-size: 1.4rem; color: var(--blue);
+    }
+    .report-title { font-size: 1.3rem; font-weight: 700; color: var(--text); }
+    .report-subtitle { font-size: 0.78rem; color: var(--muted); margin-top: 2px; }
+    .report-meta { text-align: right; font-size: 0.78rem; color: var(--muted); }
+    .report-meta strong { color: var(--text); display: block; font-size: 1rem; margin-bottom: 4px; }
+
+    /* ─── Risk score badge ─── */
+    .risk-badge {
+      display: inline-flex; align-items: center; gap: 10px;
+      padding: 14px 24px; border-radius: 12px; margin-bottom: 28px;
+      font-weight: 700;
+    }
+    .risk-critical { background: rgba(248,81,73,0.12); border: 1px solid var(--red); color: var(--red); }
+    .risk-high     { background: rgba(255,166,87,0.12); border: 1px solid var(--orange); color: var(--orange); }
+    .risk-medium   { background: rgba(227,179,65,0.12); border: 1px solid var(--yellow); color: var(--yellow); }
+    .risk-low      { background: rgba(63,185,80,0.12); border: 1px solid var(--green); color: var(--green); }
+
+    /* ─── Section headers ─── */
+    .section { margin-bottom: 36px; }
+    .section-title {
+      font-size: 0.7rem; font-weight: 700; letter-spacing: 1.5px;
+      text-transform: uppercase; color: var(--blue);
+      border-bottom: 1px solid var(--border);
+      padding-bottom: 8px; margin-bottom: 16px;
+    }
+
+    /* ─── KPI grids ─── */
+    .kpi-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-bottom: 20px; }
+    .kpi-card {
+      background: var(--bg2); border: 1px solid var(--border); border-radius: 8px;
+      padding: 14px; text-align: center;
+    }
+    .kpi-card .val { font-size: 1.6rem; font-weight: 700; line-height: 1.2; }
+    .kpi-card .lbl { font-size: 0.68rem; color: var(--muted); margin-top: 4px; }
+
+    /* ─── Tables ─── */
+    .r-table { width: 100%; border-collapse: collapse; font-size: 0.82rem; margin-top: 10px; }
+    .r-table th {
+      background: var(--bg3); color: var(--muted); font-weight: 600;
+      padding: 8px 12px; text-align: left; font-size: 0.72rem; text-transform: uppercase; letter-spacing: .5px;
+    }
+    .r-table td { padding: 8px 12px; border-bottom: 1px solid var(--border); color: var(--text); }
+    .r-table tr:last-child td { border-bottom: none; }
+    .r-table tr:hover td { background: var(--bg3); }
+    .mono { font-family: 'Courier New', monospace; font-size: 0.8rem; }
+
+    /* ─── Severity badges ─── */
+    .sev {
+      display: inline-block; padding: 2px 8px; border-radius: 10px;
+      font-size: 0.7rem; font-weight: 700; text-transform: uppercase;
+    }
+    .sev-critical { background: rgba(248,81,73,0.15); color: var(--red); }
+    .sev-high     { background: rgba(255,166,87,0.15); color: var(--orange); }
+    .sev-medium   { background: rgba(227,179,65,0.15); color: var(--yellow); }
+    .sev-low      { background: rgba(63,185,80,0.15); color: var(--green); }
+
+    /* ─── Progress bars ─── */
+    .progress-bar-wrap { background: var(--bg3); border-radius: 6px; height: 10px; overflow: hidden; margin: 6px 0; }
+    .progress-bar-fill { height: 100%; border-radius: 6px; transition: width .5s; }
+
+    /* ─── Model comparison ─── */
+    .model-compare { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-top: 12px; }
+    .model-card {
+      background: var(--bg2); border-radius: 8px; padding: 16px;
+    }
+    .model-card .model-name { font-weight: 700; margin-bottom: 10px; font-size: 0.88rem; }
+    .model-metric { display: flex; justify-content: space-between; font-size: 0.8rem; margin-bottom: 6px; }
+    .model-metric span:first-child { color: var(--muted); }
+
+    /* ─── Recommendations ─── */
+    .rec-item {
+      display: flex; gap: 12px; padding: 12px 14px;
+      background: var(--bg2); border: 1px solid var(--border); border-radius: 8px;
+      margin-bottom: 8px;
+    }
+    .rec-icon { font-size: 1.1rem; flex-shrink: 0; margin-top: 1px; }
+    .rec-text { font-size: 0.82rem; }
+    .rec-text strong { display: block; margin-bottom: 2px; }
+
+    /* ─── Footer ─── */
+    .report-footer {
+      margin-top: 40px; padding-top: 16px;
+      border-top: 1px solid var(--border);
+      font-size: 0.72rem; color: var(--muted);
+      display: flex; justify-content: space-between; align-items: center;
+    }
+
+    /* ─── Print styles ─── */
+    @media print {
+      * { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+      body { background: #fff; color: #000; }
+      #toolbar { display: none; }
+      #report { padding: 20px; max-width: 100%; }
+      .kpi-card, .model-card, .rec-item, .r-table th {
+        background: #f4f6f8 !important;
+        border-color: #ddd !important;
+        color: #000 !important;
+      }
+      .r-table td { color: #111 !important; border-bottom-color: #ddd !important; }
+      .report-header { border-bottom-color: #58a6ff; }
+      .section-title { color: #1a6fce !important; border-bottom-color: #ddd; }
+      .risk-badge { border-color: #999 !important; }
+      a { color: inherit !important; text-decoration: none; }
+    }
+  </style>
+</head>
+<body>
+
+<!-- Toolbar -->
+<div id="toolbar">
+  <h6><i>&#128196;</i>&nbsp; Rapport de sécurité — Mini-SOC &nbsp;<span style="color:var(--muted);font-size:0.78rem" id="toolbar-period"></span></h6>
+  <button class="print-btn" onclick="window.print()">&#128424; Imprimer / PDF</button>
+</div>
+
+<!-- Report -->
+<div id="report">
+
+  <!-- ─── En-tête ─── -->
+  <div class="report-header">
+    <div class="report-logo">
+      <div class="report-logo-icon">&#128737;</div>
+      <div>
+        <div class="report-title">Rapport de Sécurité</div>
+        <div class="report-subtitle">Mini-SOC — Surveillance réseau & détection d'intrusion</div>
+      </div>
+    </div>
+    <div class="report-meta">
+      <strong id="report-date">—</strong>
+      Période : <span id="report-period">—</span><br>
+      Généré à : <span id="report-time">—</span>
+    </div>
+  </div>
+
+  <!-- ─── Score de risque ─── -->
+  <div id="risk-banner" class="risk-badge risk-medium">
+    <span style="font-size:1.6rem" id="risk-icon">⚠️</span>
+    <div>
+      <div style="font-size:0.75rem;opacity:.8;text-transform:uppercase;letter-spacing:.5px">Score de risque global</div>
+      <div style="font-size:1.4rem" id="risk-score">— / 10</div>
+    </div>
+    <div style="margin-left:20px;font-size:0.82rem;font-weight:400;opacity:.85" id="risk-label">Chargement...</div>
+  </div>
+
+  <!-- ─── 1. Résumé exécutif ─── -->
+  <div class="section">
+    <div class="section-title">1. Résumé exécutif</div>
+    <div class="kpi-grid" id="exec-kpis">
+      <div class="kpi-card"><div class="val" id="kpi-logs" style="color:var(--blue)">—</div><div class="lbl">Événements total</div></div>
+      <div class="kpi-card"><div class="val" id="kpi-anomalies" style="color:var(--orange)">—</div><div class="lbl">Anomalies IA</div></div>
+      <div class="kpi-card"><div class="val" id="kpi-incidents" style="color:var(--red)">—</div><div class="lbl">Incidents ouverts</div></div>
+      <div class="kpi-card"><div class="val" id="kpi-critical" style="color:var(--red)">—</div><div class="lbl">Critiques</div></div>
+    </div>
+    <p id="exec-summary" style="color:var(--muted);font-size:0.82rem;line-height:1.7">Chargement du résumé...</p>
+  </div>
+
+  <!-- ─── 2. Statistiques des logs ─── -->
+  <div class="section">
+    <div class="section-title">2. Statistiques des logs</div>
+
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;">
+      <div>
+        <div style="font-size:0.75rem;color:var(--muted);margin-bottom:8px;font-weight:600">Répartition par type</div>
+        <div id="log-types-chart">
+          <div style="color:var(--muted);font-size:0.8rem">Chargement...</div>
+        </div>
+      </div>
+      <div>
+        <div style="font-size:0.75rem;color:var(--muted);margin-bottom:8px;font-weight:600">Top 10 IPs sources</div>
+        <table class="r-table" id="top-ips-table">
+          <thead><tr><th>IP</th><th>Événements</th></tr></thead>
+          <tbody><tr><td colspan="2" style="color:var(--muted)">Chargement...</td></tr></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- ─── 3. Détections IA ─── -->
+  <div class="section">
+    <div class="section-title">3. Détections IA — Isolation Forest & Autoencoder</div>
+    <div class="model-compare" id="model-compare">
+      <!-- Isolation Forest -->
+      <div class="model-card" style="border:1px solid rgba(88,166,255,0.3)">
+        <div class="model-name" style="color:var(--blue)">&#127795; Isolation Forest</div>
+        <div class="model-metric"><span>Anomalies détectées</span><strong id="if-det">—</strong></div>
+        <div class="model-metric"><span>Critiques</span><strong style="color:var(--red)" id="if-crit">—</strong></div>
+        <div class="model-metric"><span>Score moyen</span><strong id="if-avg">—</strong></div>
+        <div class="model-metric"><span>Precision</span><strong style="color:var(--green)" id="if-prec">—</strong></div>
+        <div class="model-metric"><span>Recall</span><strong style="color:var(--blue)" id="if-rec">—</strong></div>
+        <div class="model-metric"><span>F1 Score</span><strong style="color:var(--purple)" id="if-f1">—</strong></div>
+        <div class="model-metric"><span>TP / FP / FN</span><strong id="if-tpfpfn">—</strong></div>
+      </div>
+      <!-- Autoencoder -->
+      <div class="model-card" style="border:1px solid rgba(210,168,255,0.3)">
+        <div class="model-name" style="color:var(--purple)">&#129504; Autoencoder DL</div>
+        <div class="model-metric"><span>Anomalies détectées</span><strong id="dl-det">—</strong></div>
+        <div class="model-metric"><span>Critiques</span><strong style="color:var(--red)" id="dl-crit">—</strong></div>
+        <div class="model-metric"><span>Score moyen</span><strong id="dl-avg">—</strong></div>
+        <div class="model-metric"><span>Precision</span><strong style="color:var(--green)" id="dl-prec">—</strong></div>
+        <div class="model-metric"><span>Recall</span><strong style="color:var(--blue)" id="dl-rec">—</strong></div>
+        <div class="model-metric"><span>F1 Score</span><strong style="color:var(--purple)" id="dl-f1">—</strong></div>
+        <div class="model-metric"><span>TP / FP / FN</span><strong id="dl-tpfpfn">—</strong></div>
+      </div>
+    </div>
+
+    <div style="margin-top:16px">
+      <div style="font-size:0.75rem;color:var(--muted);margin-bottom:8px;font-weight:600">Top anomalies critiques (24h)</div>
+      <table class="r-table" id="top-anomalies">
+        <thead><tr><th>Timestamp</th><th>IP source</th><th>Score</th><th>Sévérité</th><th>Type</th><th>Modèle</th></tr></thead>
+        <tbody><tr><td colspan="6" style="color:var(--muted)">Chargement...</td></tr></tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- ─── 4. Incidents ─── -->
+  <div class="section">
+    <div class="section-title">4. Incidents — Vue d'ensemble</div>
+    <div class="kpi-grid" style="grid-template-columns:repeat(4,1fr);margin-bottom:16px">
+      <div class="kpi-card"><div class="val" id="inc-total">—</div><div class="lbl">Total</div></div>
+      <div class="kpi-card"><div class="val" style="color:var(--orange)" id="inc-open">—</div><div class="lbl">Ouverts</div></div>
+      <div class="kpi-card"><div class="val" style="color:var(--green)" id="inc-tp-rate">—</div><div class="lbl">Taux TP</div></div>
+      <div class="kpi-card"><div class="val" style="color:var(--red)" id="inc-fp-rate">—</div><div class="lbl">Taux FP</div></div>
+    </div>
+    <div style="font-size:0.75rem;color:var(--muted);margin-bottom:8px;font-weight:600">Incidents critiques / high ouverts</div>
+    <table class="r-table" id="open-incidents">
+      <thead><tr><th>Date</th><th>Titre</th><th>Sévérité</th><th>Statut</th><th>Verdict</th><th>Assigné</th></tr></thead>
+      <tbody><tr><td colspan="6" style="color:var(--muted)">Chargement...</td></tr></tbody>
+    </table>
+  </div>
+
+  <!-- ─── 5. Recommandations ─── -->
+  <div class="section">
+    <div class="section-title">5. Recommandations</div>
+    <div id="recommendations">
+      <div style="color:var(--muted);font-size:0.8rem">Chargement des recommandations...</div>
+    </div>
+  </div>
+
+  <!-- ─── Footer ─── -->
+  <div class="report-footer">
+    <span>Mini-SOC — Rapport généré automatiquement</span>
+    <span id="footer-ts">—</span>
+  </div>
+
+</div><!-- /#report -->
+
+<script>
+const NOW = new Date();
+
+function fmt(d) { return d ? new Date(d).toLocaleString('fr-FR') : '—'; }
+function fmtDate(d) { return d ? new Date(d).toLocaleDateString('fr-FR') : '—'; }
+function pct(v) { return v != null ? (v * 100).toFixed(0) + '%' : 'N/A'; }
+
+// Header dates
+document.getElementById('report-date').textContent  = NOW.toLocaleDateString('fr-FR', {weekday:'long', year:'numeric', month:'long', day:'numeric'});
+document.getElementById('report-time').textContent  = NOW.toLocaleTimeString('fr-FR');
+document.getElementById('toolbar-period').textContent = '(24h)';
+document.getElementById('report-period').textContent  = '24 dernières heures';
+document.getElementById('footer-ts').textContent     = 'Généré le ' + NOW.toLocaleString('fr-FR');
+
+// Risk score rendering
+function renderRisk(score) {
+  const el    = document.getElementById('risk-banner');
+  const scEl  = document.getElementById('risk-score');
+  const lbEl  = document.getElementById('risk-label');
+  const icEl  = document.getElementById('risk-icon');
+  scEl.textContent = (score != null ? score.toFixed(1) : '—') + ' / 10';
+  el.className = 'risk-badge ';
+  if (score == null) { el.className += 'risk-medium'; lbEl.textContent = 'Score indisponible'; return; }
+  if (score >= 7) {
+    el.className += 'risk-critical'; lbEl.textContent = 'Risque critique — Action immédiate requise'; icEl.textContent = '🚨';
+  } else if (score >= 4) {
+    el.className += 'risk-high'; lbEl.textContent = 'Risque élevé — Surveillance renforcée recommandée'; icEl.textContent = '⚠️';
+  } else if (score >= 2) {
+    el.className += 'risk-medium'; lbEl.textContent = 'Risque modéré — Audit de routine conseillé'; icEl.textContent = '🔔';
+  } else {
+    el.className += 'risk-low'; lbEl.textContent = 'Risque faible — Aucune menace critique détectée'; icEl.textContent = '✅';
+  }
+}
+
+// Log types bar chart
+function renderLogTypes(types) {
+  const container = document.getElementById('log-types-chart');
+  if (!types || types.length === 0) { container.innerHTML = '<span style="color:var(--muted);font-size:0.8rem">Aucune donnée</span>'; return; }
+  const max = types[0].count || 1;
+  let html = '';
+  for (const t of types.slice(0, 6)) {
+    const w = Math.round(t.count / max * 100);
+    html += `<div style="margin-bottom:8px;font-size:0.78rem">
+      <div style="display:flex;justify-content:space-between;margin-bottom:2px">
+        <span class="mono">${t.type}</span>
+        <span style="color:var(--muted)">${t.count.toLocaleString()}</span>
+      </div>
+      <div class="progress-bar-wrap"><div class="progress-bar-fill" style="width:${w}%;background:var(--blue)"></div></div>
+    </div>`;
+  }
+  container.innerHTML = html;
+}
+
+// Top IPs table
+function renderTopIPs(ips) {
+  const tbody = document.querySelector('#top-ips-table tbody');
+  if (!ips || ips.length === 0) { tbody.innerHTML = '<tr><td colspan="2" style="color:var(--muted)">Aucune donnée</td></tr>'; return; }
+  tbody.innerHTML = ips.slice(0, 10).map(ip =>
+    `<tr><td class="mono" style="color:var(--blue)">${ip.ip}</td><td>${ip.count.toLocaleString()}</td></tr>`
+  ).join('');
+}
+
+// Top anomalies table
+function renderTopAnomalies(ifItems, dlItems) {
+  const tbody = document.querySelector('#top-anomalies tbody');
+  const all = [
+    ...(ifItems || []).map(a => ({...a, _model: 'IF', _color: 'var(--blue)'})),
+    ...(dlItems || []).map(a => ({...a, _model: 'DL', _color: 'var(--purple)'}))
+  ].filter(a => (a.severity === 'critical' || a.severity === 'high'))
+   .sort((a, b) => (b['@timestamp'] || '').localeCompare(a['@timestamp'] || ''))
+   .slice(0, 15);
+
+  if (all.length === 0) { tbody.innerHTML = '<tr><td colspan="6" style="color:var(--muted)">Aucune anomalie critique / high</td></tr>'; return; }
+  tbody.innerHTML = all.map(a => {
+    const ts = (a['@timestamp'] || '').replace('T', ' ').slice(0, 16);
+    const sev = a.severity || 'medium';
+    return `<tr>
+      <td style="color:var(--muted)">${ts}</td>
+      <td class="mono" style="color:${a._color}">${a.src_ip || '—'}</td>
+      <td><strong>${(a.anomaly_score || 0).toFixed(3)}</strong></td>
+      <td><span class="sev sev-${sev}">${sev}</span></td>
+      <td class="mono">${a.log_type || '—'}</td>
+      <td><span style="padding:1px 7px;border-radius:8px;font-size:0.7rem;background:rgba(88,166,255,0.15);color:${a._color}">${a._model}</span></td>
+    </tr>`;
+  }).join('');
+}
+
+// Open incidents table
+function renderOpenIncidents(incidents) {
+  const tbody = document.querySelector('#open-incidents tbody');
+  const critOpen = (incidents || []).filter(i => ['critical','high'].includes(i.severity) && i.status !== 'closed');
+  if (critOpen.length === 0) { tbody.innerHTML = '<tr><td colspan="6" style="color:var(--muted)">Aucun incident critique/high ouvert</td></tr>'; return; }
+  tbody.innerHTML = critOpen.slice(0, 20).map(i => {
+    const sev = i.severity || 'medium';
+    const verdict = i.verdict || 'none';
+    const vLabel = {true_positive: 'TP', false_positive: 'FP', benign: 'Bénin', none: '—'}[verdict] || verdict;
+    const vColor = {true_positive: 'var(--green)', false_positive: 'var(--red)', benign: 'var(--blue)'}[verdict] || 'var(--muted)';
+    const statusLabel = {awaiting_action: 'En attente', in_progress: 'En cours', closed: 'Fermé'}[i.status] || i.status;
+    return `<tr>
+      <td style="color:var(--muted)">${(i.created_at||'').slice(0,16).replace('T',' ')}</td>
+      <td>${i.title || '—'}</td>
+      <td><span class="sev sev-${sev}">${sev}</span></td>
+      <td>${statusLabel}</td>
+      <td style="color:${vColor};font-weight:600">${vLabel}</td>
+      <td style="color:var(--muted)">${i.assigned_to || '—'}</td>
+    </tr>`;
+  }).join('');
+}
+
+// Recommendations
+function renderRecommendations(score, topIPs, ifMet, dlMet, incStats) {
+  const el = document.getElementById('recommendations');
+  const recs = [];
+
+  if (score >= 7) {
+    const ip = (topIPs && topIPs[0]) ? topIPs[0].ip : 'IP inconnue';
+    recs.push({
+      icon: '🚨', color: 'var(--red)', urgency: 'URGENT',
+      title: `Bloquer immédiatement l'IP ${ip}`,
+      body: `Cette IP génère le plus d'activité suspecte. Ajouter une règle de blocage dans le pare-feu ou l'IDS.`
+    });
+  }
+
+  if (topIPs && topIPs.length > 0 && topIPs[0].count > 1000) {
+    recs.push({
+      icon: '⚡', color: 'var(--orange)', urgency: 'HIGH',
+      title: 'Brute force SSH probable — limiter les tentatives',
+      body: `Activer fail2ban ou limiter les connexions SSH à 5 tentatives/min sur le serveur victime.`
+    });
+  }
+
+  const ifPrec = ifMet && ifMet.precision != null ? ifMet.precision : null;
+  if (ifPrec != null && ifPrec < 0.5) {
+    recs.push({
+      icon: '🔧', color: 'var(--yellow)', urgency: 'MEDIUM',
+      title: 'Isolation Forest — précision faible (< 50%)',
+      body: `Trop de faux positifs. Envisager de relancer le réentraînement avec une baseline plus propre ou d'augmenter le seuil de détection.`
+    });
+  }
+
+  const dlPrec = dlMet && dlMet.precision != null ? dlMet.precision : null;
+  if (dlPrec != null && dlPrec < 0.5) {
+    recs.push({
+      icon: '🔧', color: 'var(--yellow)', urgency: 'MEDIUM',
+      title: 'Autoencoder — précision faible (< 50%)',
+      body: `Ajuster le seuil MSE ou réentraîner le modèle. Vérifier que la baseline d'entraînement ne contient pas de logs d'attaque.`
+    });
+  }
+
+  if (incStats && incStats.awaiting > 5) {
+    recs.push({
+      icon: '📋', color: 'var(--blue)', urgency: 'LOW',
+      title: `${incStats.awaiting} incident(s) en attente de triage`,
+      body: 'Assigner et traiter les incidents en attente pour maintenir un temps de réponse acceptable.'
+    });
+  }
+
+  if (recs.length === 0) {
+    recs.push({
+      icon: '✅', color: 'var(--green)', urgency: 'INFO',
+      title: 'Aucune menace critique détectée',
+      body: 'Continuer la surveillance de routine. Un audit hebdomadaire des logs est recommandé.'
+    });
+  }
+
+  const urgencyColor = {URGENT: 'var(--red)', HIGH: 'var(--orange)', MEDIUM: 'var(--yellow)', LOW: 'var(--blue)', INFO: 'var(--green)'};
+
+  el.innerHTML = recs.map(r => `
+    <div class="rec-item" style="border-left:3px solid ${r.color}">
+      <div class="rec-icon">${r.icon}</div>
+      <div class="rec-text">
+        <strong>${r.title} &nbsp;<span style="font-size:0.68rem;padding:2px 8px;border-radius:8px;background:rgba(0,0,0,0.3);color:${urgencyColor[r.urgency]}">${r.urgency}</span></strong>
+        ${r.body}
+      </div>
+    </div>
+  `).join('');
+}
+
+// ─── Main load ────────────────────────────────────────────────────────────────
+async function loadReport() {
+  try {
+    const [overviewRes, compareRes, ifMetRes, dlMetRes, incStatsRes] = await Promise.all([
+      fetch('/api/analytics/overview'),
+      fetch('/api/compare?window=24h'),
+      fetch('/api/ia/metrics?window=24h'),
+      fetch('/api/dl/metrics?window=24h'),
+      fetch('/api/incidents/stats')
+    ]);
+
+    const ov       = await overviewRes.json();
+    const cmp      = await compareRes.json();
+    const ifMet    = await ifMetRes.json();
+    const dlMet    = await dlMetRes.json();
+    const incStats = await incStatsRes.json();
+
+    const IF = cmp.isolation_forest;
+    const DL = cmp.autoencoder;
+
+    // Risk score (0-10): weighted from anomalies, incidents, critical events
+    const critWeight   = (ov.anomalies_critical || 0) * 1.5;
+    const incWeight    = (incStats.awaiting || 0) * 0.5;
+    const anomWeight   = Math.min((IF.total + DL.total) / 100, 2);
+    const rawScore     = Math.min(10, critWeight + incWeight + anomWeight);
+    renderRisk(rawScore);
+
+    // Exec summary KPIs
+    document.getElementById('kpi-logs').textContent      = (ov.logs_24h || 0).toLocaleString();
+    document.getElementById('kpi-anomalies').textContent = (IF.total + DL.total).toLocaleString();
+    document.getElementById('kpi-incidents').textContent = (incStats.awaiting + (incStats.in_progress || 0)).toLocaleString();
+    document.getElementById('kpi-critical').textContent  = (ov.anomalies_critical || 0).toLocaleString();
+
+    // Executive text
+    const tp = ((incStats.tp_rate || 0) * 100).toFixed(0);
+    document.getElementById('exec-summary').innerHTML =
+      `Sur les 24 dernières heures, <strong>${(ov.logs_24h||0).toLocaleString()}</strong> événements ont été collectés.
+      L'Isolation Forest a détecté <strong>${IF.total}</strong> anomalies, l'Autoencoder <strong>${DL.total}</strong>.
+      <strong>${incStats.total || 0}</strong> incidents ont été créés dont <strong>${incStats.awaiting || 0}</strong> restent en attente de triage.
+      Taux de vrais positifs (incidents labellisés) : <strong>${tp}%</strong>.`;
+
+    // Log types
+    const logTypes = (ov.log_types || []).map(b => ({ type: b.key, count: b.doc_count }));
+    renderLogTypes(logTypes);
+
+    // Top IPs
+    const topIPs = (ov.top_ips || []).map(b => ({ ip: b.key, count: b.doc_count }));
+    renderTopIPs(topIPs);
+
+    // Models
+    document.getElementById('if-det').textContent  = IF.total;
+    document.getElementById('if-crit').textContent = IF.critical;
+    document.getElementById('if-avg').textContent  = IF.avg_score.toFixed(3);
+    document.getElementById('if-prec').textContent = pct(ifMet.precision);
+    document.getElementById('if-rec').textContent  = pct(ifMet.recall);
+    document.getElementById('if-f1').textContent   = ifMet.f1 != null ? ifMet.f1.toFixed(3) : 'N/A';
+    document.getElementById('if-tpfpfn').textContent = `${ifMet.tp} / ${ifMet.fp} / ${ifMet.fn}`;
+
+    document.getElementById('dl-det').textContent  = DL.total;
+    document.getElementById('dl-crit').textContent = DL.critical;
+    document.getElementById('dl-avg').textContent  = DL.avg_score.toFixed(3);
+    document.getElementById('dl-prec').textContent = pct(dlMet.precision);
+    document.getElementById('dl-rec').textContent  = pct(dlMet.recall);
+    document.getElementById('dl-f1').textContent   = dlMet.f1 != null ? dlMet.f1.toFixed(3) : 'N/A';
+    document.getElementById('dl-tpfpfn').textContent = `${dlMet.tp} / ${dlMet.fp} / ${dlMet.fn}`;
+
+    // Top anomalies
+    renderTopAnomalies(IF.recent, DL.recent);
+
+    // Incidents
+    document.getElementById('inc-total').textContent   = incStats.total || '—';
+    document.getElementById('inc-open').textContent    = (incStats.awaiting || 0) + (incStats.in_progress || 0);
+    document.getElementById('inc-tp-rate').textContent = pct(incStats.tp_rate);
+    document.getElementById('inc-fp-rate').textContent = pct(incStats.fp_rate);
+
+    // Open critical/high incidents: fetch from overview or use recent list
+    renderOpenIncidents(ov.recent_incidents || []);
+
+    // Recommendations
+    renderRecommendations(rawScore, topIPs, ifMet, dlMet, incStats);
+
+  } catch(e) {
+    console.error('loadReport error:', e);
+    document.getElementById('exec-summary').textContent = 'Erreur lors du chargement des données: ' + e.message;
+  }
+}
+
+loadReport();
+</script>
+</body>
+</html>

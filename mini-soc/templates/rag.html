@@ -1,0 +1,279 @@
+{% extends "base.html" %}
+{% block title %}RAG — Base de Connaissances SOC{% endblock %}
+{% block content %}
+<style>
+  .rag-answer {
+    background: var(--bg3); border: 1px solid var(--border);
+    border-radius: 8px; padding: 18px; font-size: 0.84rem;
+    line-height: 1.7; color: var(--text2); white-space: pre-wrap;
+    font-family: 'Space Grotesk', sans-serif;
+    max-height: 420px; overflow-y: auto;
+  }
+  .chunk-card {
+    background: var(--bg3); border: 1px solid var(--border);
+    border-radius: 6px; padding: 12px 14px; margin-bottom: 8px;
+    font-size: 0.78rem;
+  }
+  .chunk-card:hover { border-color: var(--border2); }
+  .score-bar { height: 4px; border-radius: 2px; background: var(--border); margin-top: 6px; }
+  .score-fill { height: 100%; border-radius: 2px; background: var(--cyan); }
+  .source-tag {
+    font-size: 0.62rem; font-weight: 700; padding: 2px 8px; border-radius: 4px;
+    background: rgba(0,217,255,0.08); color: var(--cyan);
+    border: 1px solid rgba(0,217,255,0.25); font-family: 'JetBrains Mono', monospace;
+  }
+  .typing-dots span {
+    display: inline-block; width: 6px; height: 6px; border-radius: 50%;
+    background: var(--cyan); margin: 0 2px;
+    animation: tdot 1.2s infinite;
+  }
+  .typing-dots span:nth-child(2){ animation-delay:.2s; }
+  .typing-dots span:nth-child(3){ animation-delay:.4s; }
+  @keyframes tdot { 0%,80%,100%{transform:scale(.6);opacity:.4} 40%{transform:scale(1);opacity:1} }
+</style>
+
+<!-- Header -->
+<div class="d-flex align-items-center justify-content-between mb-3 flex-wrap gap-2">
+  <div>
+    <h5 style="margin:0;font-weight:700;color:var(--text2);">
+      <i class="fas fa-book-reader me-2" style="color:var(--cyan);"></i>Base de Connaissances SOC — RAG
+    </h5>
+    <div style="font-size:0.74rem;color:var(--muted);margin-top:3px;">
+      Posez vos questions sur les playbooks, NIST, MITRE ATT&amp;CK, procédures IR
+    </div>
+  </div>
+  <div id="rag-status-bar" style="display:flex;align-items:center;gap:8px;font-size:0.72rem;">
+    <div id="rag-status-dot" style="width:8px;height:8px;border-radius:50%;background:var(--muted);"></div>
+    <span id="rag-status-text" style="color:var(--muted);">Chargement…</span>
+  </div>
+</div>
+
+<div class="row g-3">
+
+  <!-- Panneau gauche : question + réponse -->
+  <div class="col-lg-7">
+    <div class="card-section" style="padding:16px;">
+      <div class="section-title"><i class="fas fa-question-circle me-1"></i>Question</div>
+
+      <div style="display:flex;gap:8px;margin-bottom:12px;">
+        <textarea id="rag-question" rows="3" class="form-control"
+          placeholder="Ex: Quelles sont les étapes de containment pour un SSH brute force ?"
+          style="font-size:0.82rem;resize:vertical;"></textarea>
+        <button id="rag-btn" onclick="ragQuery()" class="btn-soc btn-soc-primary"
+          style="min-width:90px;align-self:flex-end;justify-content:center;">
+          <i class="fas fa-paper-plane"></i>Envoyer
+        </button>
+      </div>
+
+      <!-- Suggestions rapides -->
+      <div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:14px;">
+        <span class="section-title" style="margin-bottom:0;border:none;padding-bottom:0;width:100%;">Suggestions</span>
+        <button class="btn-soc" style="font-size:0.72rem;padding:4px 10px;" onclick="suggest('Quelles sont les étapes SSH brute force ?')">SSH Brute Force</button>
+        <button class="btn-soc" style="font-size:0.72px;padding:4px 10px;font-size:0.72rem;" onclick="suggest('Comment détecter une anomalie IA avec Isolation Forest ?')">Anomalie IA</button>
+        <button class="btn-soc" style="font-size:0.72rem;padding:4px 10px;" onclick="suggest('Quelles sont les techniques MITRE ATT&CK couvertes ?')">MITRE ATT&CK</button>
+        <button class="btn-soc" style="font-size:0.72rem;padding:4px 10px;" onclick="suggest('Procédure escalade L1 vers L2 ?')">Escalade L1→L2</button>
+        <button class="btn-soc" style="font-size:0.72rem;padding:4px 10px;" onclick="suggest('SLA critique et élevé selon la politique IR ?')">SLA & délais</button>
+        <button class="btn-soc" style="font-size:0.72rem;padding:4px 10px;" onclick="suggest('Commandes containment attaque web SQLi ?')">Web Attack</button>
+      </div>
+
+      <!-- Réponse -->
+      <div class="section-title"><i class="fas fa-robot me-1" style="color:var(--cyan);"></i>Réponse llama3</div>
+      <div id="rag-answer-box">
+        <div style="text-align:center;padding:30px;color:var(--muted);font-size:0.78rem;">
+          <i class="fas fa-book-open" style="font-size:1.5rem;margin-bottom:8px;display:block;opacity:0.3;"></i>
+          Posez une question pour obtenir une réponse basée sur la documentation SOC
+        </div>
+      </div>
+
+      <!-- Sources -->
+      <div id="rag-sources-box" style="display:none;margin-top:12px;">
+        <div class="section-title"><i class="fas fa-file-alt me-1"></i>Sources utilisées</div>
+        <div id="rag-sources-list" style="display:flex;flex-wrap:wrap;gap:6px;"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Panneau droit : chunks pertinents + statut -->
+  <div class="col-lg-5">
+
+    <!-- Statut base vectorielle -->
+    <div class="card-section" style="padding:14px;margin-bottom:12px;">
+      <div class="section-title"><i class="fas fa-database me-1"></i>Base vectorielle</div>
+      <div id="rag-stats" style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">
+        <div class="stat-card" style="padding:10px;text-align:center;">
+          <div class="number" id="stat-chunks" style="font-size:1.6rem;color:var(--cyan);">—</div>
+          <div class="label">Chunks</div>
+        </div>
+        <div class="stat-card" style="padding:10px;text-align:center;">
+          <div class="number" id="stat-pdfs" style="font-size:1.6rem;color:var(--green);">—</div>
+          <div class="label">Documents</div>
+        </div>
+      </div>
+      <div id="rag-pdf-list" style="margin-top:10px;display:flex;flex-wrap:wrap;gap:5px;"></div>
+
+      {% if current_user and current_user.level == 'L3' %}
+      <button onclick="rebuildIndex()" id="rebuild-btn" class="btn-soc btn-soc-danger mt-2 w-100" style="justify-content:center;">
+        <i class="fas fa-sync-alt"></i>Reconstruire l'index (L3)
+      </button>
+      {% endif %}
+    </div>
+
+    <!-- Chunks pertinents -->
+    <div class="card-section" style="padding:14px;">
+      <div class="section-title"><i class="fas fa-puzzle-piece me-1"></i>Extraits pertinents</div>
+      <div id="rag-chunks-box">
+        <div style="color:var(--muted);font-size:0.76rem;text-align:center;padding:20px 0;">
+          Les extraits utilisés apparaîtront ici
+        </div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<script>
+// Load RAG status on page load
+(async function() {
+  try {
+    const d = await fetch('/api/rag/status').then(r => r.json());
+    const dot  = document.getElementById('rag-status-dot');
+    const txt  = document.getElementById('rag-status-text');
+    document.getElementById('stat-chunks').textContent = d.chunks || 0;
+    document.getElementById('stat-pdfs').textContent   = d.pdfs   || 0;
+
+    if (d.chunks > 0) {
+      dot.style.background = 'var(--green)';
+      dot.style.boxShadow  = '0 0 6px var(--green)';
+      txt.style.color = 'var(--green)';
+      txt.textContent = `✓ ${d.chunks} chunks indexés`;
+    } else {
+      dot.style.background = 'var(--orange)';
+      txt.style.color = 'var(--orange)';
+      txt.textContent = 'Index vide — reconstruction nécessaire';
+    }
+
+    if (d.pdf_names && d.pdf_names.length) {
+      const el = document.getElementById('rag-pdf-list');
+      d.pdf_names.forEach(n => {
+        const s = document.createElement('span');
+        s.className = 'source-tag';
+        s.textContent = n.replace(/_/g,' ');
+        el.appendChild(s);
+      });
+    }
+  } catch(e) {
+    document.getElementById('rag-status-text').textContent = 'Erreur chargement statut';
+  }
+})();
+
+function suggest(text) {
+  document.getElementById('rag-question').value = text;
+  ragQuery();
+}
+
+async function ragQuery() {
+  const question = document.getElementById('rag-question').value.trim();
+  if (!question) return;
+
+  const btn = document.getElementById('rag-btn');
+  btn.disabled = true;
+  btn.innerHTML = '<div class="typing-dots"><span></span><span></span><span></span></div>';
+
+  document.getElementById('rag-answer-box').innerHTML = `
+    <div style="padding:20px;text-align:center;color:var(--muted);font-size:0.78rem;">
+      <div class="typing-dots" style="justify-content:center;display:flex;margin-bottom:8px;"><span></span><span></span><span></span></div>
+      llama3 génère la réponse depuis les documents SOC…
+    </div>`;
+  document.getElementById('rag-chunks-box').innerHTML = '';
+  document.getElementById('rag-sources-box').style.display = 'none';
+
+  try {
+    const r = await fetch('/api/rag/query', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({question})
+    });
+    const d = await r.json();
+
+    if (d.error) {
+      document.getElementById('rag-answer-box').innerHTML =
+        `<div style="color:var(--red);padding:14px;font-size:0.8rem;"><i class="fas fa-exclamation-triangle me-2"></i>${d.error}</div>`;
+    } else {
+      // Render answer
+      document.getElementById('rag-answer-box').innerHTML =
+        `<div class="rag-answer">${escHtml(d.answer)}</div>`;
+
+      // Sources
+      if (d.sources && d.sources.length) {
+        const sl = document.getElementById('rag-sources-list');
+        sl.innerHTML = '';
+        d.sources.forEach(s => {
+          const sp = document.createElement('span');
+          sp.className = 'source-tag';
+          sp.textContent = s.replace(/_/g,' ');
+          sl.appendChild(sp);
+        });
+        document.getElementById('rag-sources-box').style.display = 'block';
+      }
+
+      // Chunks
+      if (d.chunks && d.chunks.length) {
+        const box = document.getElementById('rag-chunks-box');
+        box.innerHTML = '';
+        d.chunks.forEach((c, i) => {
+          const pct = Math.round(c.score * 100);
+          const col = pct >= 80 ? 'var(--green)' : pct >= 60 ? 'var(--cyan)' : 'var(--yellow)';
+          box.innerHTML += `
+            <div class="chunk-card">
+              <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;">
+                <span class="source-tag">${escHtml(c.source.replace(/_/g,' '))}</span>
+                <span style="font-family:'JetBrains Mono',monospace;font-size:0.65rem;color:${col};">${pct}%</span>
+              </div>
+              <div style="color:var(--muted);font-size:0.74rem;line-height:1.5;">${escHtml(c.text)}</div>
+              <div class="score-bar"><div class="score-fill" style="width:${pct}%;background:${col};"></div></div>
+            </div>`;
+        });
+      }
+    }
+  } catch(e) {
+    document.getElementById('rag-answer-box').innerHTML =
+      `<div style="color:var(--red);padding:14px;font-size:0.8rem;">Erreur réseau : ${e.message}</div>`;
+  }
+
+  btn.disabled = false;
+  btn.innerHTML = '<i class="fas fa-paper-plane"></i>Envoyer';
+}
+
+async function rebuildIndex() {
+  if (!confirm('Reconstruire l\'index RAG ? Cette opération prend ~30 secondes.')) return;
+  const btn = document.getElementById('rebuild-btn');
+  btn.disabled = true;
+  btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i>Reconstruction…';
+  try {
+    const d = await fetch('/api/rag/rebuild', {method:'POST'}).then(r => r.json());
+    if (d.status === 'ok') {
+      document.getElementById('stat-chunks').textContent = d.chunks;
+      btn.innerHTML = `<i class="fas fa-check"></i>${d.chunks} chunks reconstruits`;
+      btn.style.color = 'var(--green)';
+    } else {
+      btn.innerHTML = `<i class="fas fa-times"></i>${d.error}`;
+    }
+  } catch(e) {
+    btn.innerHTML = '<i class="fas fa-times"></i>Erreur';
+  }
+  setTimeout(() => {
+    btn.disabled = false;
+    btn.innerHTML = '<i class="fas fa-sync-alt"></i>Reconstruire l\'index (L3)';
+    btn.style.color = '';
+  }, 4000);
+}
+
+document.getElementById('rag-question').addEventListener('keydown', e => {
+  if (e.key === 'Enter' && e.ctrlKey) ragQuery();
+});
+
+function escHtml(s) {
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+</script>
+{% endblock %}

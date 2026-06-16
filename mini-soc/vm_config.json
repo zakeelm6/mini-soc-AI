@@ -1,0 +1,20 @@
+{
+  "vm_soc": {
+    "role": "SOC",
+    "ip": "192.168.50.10",
+    "hostname": "soc-platform",
+    "tools": "Elasticsearch \u00b7 Logstash \u00b7 Kibana \u00b7 Flask \u00b7 IA"
+  },
+  "vm_victime": {
+    "role": "Victime",
+    "ip": "192.168.50.20",
+    "hostname": "victim-host",
+    "tools": "Apache \u00b7 DVWA \u00b7 SSH \u00b7 Filebeat \u00b7 Suricata"
+  },
+  "vm_attaquant": {
+    "role": "Attaquant",
+    "ip": "192.168.50.30",
+    "hostname": "",
+    "tools": "Hydra \u00b7 Nmap \u00b7 Nikto \u00b7 SQLMap"
+  }
+}

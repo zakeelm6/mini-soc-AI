@@ -1,0 +1,59 @@
+[
+  {
+    "src_ip": "192.168.122.231",
+    "log_type": "auth",
+    "score": 0.98,
+    "verdict": "true_positive",
+    "attack_type": "SSH Brute Force",
+    "confidence": 0.95,
+    "summary": "Attaque SSH brute force depuis 192.168.122.231",
+    "evidence": [],
+    "actions": [],
+    "saved_at": "2026-05-14T14:57:02.289897+00:00"
+  },
+  {
+    "src_ip": "",
+    "log_type": "ids_alert",
+    "score": 10.0,
+    "verdict": "true_positive",
+    "attack_type": "SSH Brute Force",
+    "confidence": 1.0,
+    "summary": "Attaque SSH brute force depuis unknown IP source",
+    "evidence": [],
+    "actions": [
+      "investigate unknown IP source"
+    ],
+    "saved_at": "2026-05-14T15:40:20.064936+00:00"
+  },
+  {
+    "src_ip": "192.168.122.1",
+    "log_type": "anomaly_ia",
+    "score": 8.5,
+    "verdict": "true_positive",
+    "attack_type": "SSH Brute Force",
+    "confidence": 0.85,
+    "summary": "Attaque SSH brute force depuis unknown IP source",
+    "evidence": [],
+    "actions": [
+      "investigation"
+    ],
+    "saved_at": "2026-05-17T14:23:37.826910+00:00"
+  },
+  {
+    "src_ip": "",
+    "log_type": "brute_force",
+    "score": 0,
+    "verdict": "false_positive",
+    "attack_type": "SSH Brute Force",
+    "confidence": 0.97,
+    "summary": "Aucune activité SSH suspecte, score faible (0.00), rate=0/5min",
+    "evidence": [
+      "Aucune activité SSH suspecte, score faible (0.00), rate=0/5min",
+      "CVE-2026-6722"
+    ],
+    "actions": [
+      "Surveiller"
+    ],
+    "saved_at": "2026-06-07T13:18:39.045074+00:00"
+  }
+]

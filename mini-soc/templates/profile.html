@@ -1,0 +1,141 @@
+{% extends "base.html" %}
+{% block title %}Mon profil{% endblock %}
+{% block content %}
+
+<div class="row justify-content-center">
+  <div class="col-md-6">
+
+    <div class="card-section mb-3">
+      <div class="section-title"><i class="fas fa-user-circle me-2"></i>Mon profil</div>
+
+      <div class="d-flex align-items-center gap-3 mb-4">
+        <div style="width:60px;height:60px;border-radius:50%;display:flex;align-items:center;justify-content:center;
+                    background:{% if current_user.level == 'L3' %}rgba(248,81,73,0.15){% elif current_user.level == 'L2' %}rgba(255,166,87,0.15){% else %}rgba(88,166,255,0.15){% endif %};">
+          <i class="fas fa-user" style="font-size:1.6rem;color:{% if current_user.level == 'L3' %}var(--red){% elif current_user.level == 'L2' %}#ffa657{% else %}var(--blue){% endif %};"></i>
+        </div>
+        <div>
+          <div style="font-size:1.1rem;font-weight:700;">{{ current_user.name }}</div>
+          <div style="font-size:0.78rem;color:var(--muted);">@{{ current_user.username }}</div>
+          <span style="font-size:0.7rem;font-weight:700;padding:2px 10px;border-radius:12px;
+            background:{% if current_user.level == 'L3' %}rgba(248,81,73,0.15);color:var(--red){% elif current_user.level == 'L2' %}rgba(255,166,87,0.15);color:#ffa657{% else %}rgba(88,166,255,0.15);color:var(--blue){% endif %};">
+            {{ current_user.level }}
+            — {% if current_user.level == 'L3' %}Admin{% elif current_user.level == 'L2' %}Senior{% else %}Analyste{% endif %}
+          </span>
+        </div>
+      </div>
+
+      <div class="row g-2" style="font-size:0.82rem;">
+        <div class="col-4" style="color:var(--muted);">Email</div>
+        <div class="col-8">
+          {{ current_user.email or '—' }}
+          <button onclick="document.getElementById('emailEditForm').style.display='block';this.style.display='none'"
+                  style="background:none;border:none;color:var(--blue);font-size:0.72rem;cursor:pointer;margin-left:6px;">
+            <i class="fas fa-edit"></i> modifier
+          </button>
+          <form id="emailEditForm" method="POST" action="/profile/update_email"
+                style="display:none;margin-top:6px;" class="d-flex gap-2">
+            <input type="email" name="email" value="{{ current_user.email or '' }}"
+                   placeholder="ton@email.com" required
+                   style="flex:1;background:var(--bg3);border:1px solid var(--border);color:var(--text);
+                          border-radius:6px;padding:5px 8px;font-size:0.78rem;outline:none;">
+            <button type="submit" class="btn-soc btn-soc-primary" style="padding:4px 10px;font-size:0.75rem;">
+              <i class="fas fa-check"></i>
+            </button>
+          </form>
+        </div>
+        <div class="col-4" style="color:var(--muted);">Accès</div>
+        <div class="col-8">
+          {% if current_user.level == 'L3' %}Complet (logs, incidents, IA, analytics, admin)
+          {% elif current_user.level == 'L2' %}Étendu (logs, incidents, IA, analytics)
+          {% else %}Basique (logs, mes incidents, CVE, mesures){% endif %}
+        </div>
+      </div>
+    </div>
+
+    <div class="card-section">
+      <div class="section-title"><i class="fas fa-key me-2"></i>Changer le mot de passe</div>
+
+      {% if error %}
+      <div style="background:rgba(248,81,73,0.1);border:1px solid var(--red);border-radius:8px;padding:10px 14px;font-size:0.82rem;color:var(--red);margin-bottom:14px;">
+        <i class="fas fa-exclamation-circle me-1"></i>{{ error }}
+      </div>
+      {% endif %}
+      {% if success %}
+      <div style="background:rgba(63,185,80,0.1);border:1px solid var(--green);border-radius:8px;padding:10px 14px;font-size:0.82rem;color:var(--green);margin-bottom:14px;">
+        <i class="fas fa-check-circle me-1"></i>{{ success }}
+      </div>
+      {% endif %}
+
+      <form method="POST" action="/profile/change_password">
+        <div class="mb-3">
+          <label style="font-size:0.75rem;color:var(--muted);">Ancien mot de passe</label>
+          <input type="password" name="old_password" required
+                 style="background:var(--bg3);border:1px solid var(--border);color:var(--text);border-radius:6px;padding:8px 12px;font-size:0.85rem;width:100%;outline:none;margin-top:4px;">
+        </div>
+        <div class="mb-3">
+          <label style="font-size:0.75rem;color:var(--muted);">Nouveau mot de passe</label>
+          <input type="password" name="new_password" required minlength="4"
+                 style="background:var(--bg3);border:1px solid var(--border);color:var(--text);border-radius:6px;padding:8px 12px;font-size:0.85rem;width:100%;outline:none;margin-top:4px;">
+        </div>
+        <button type="submit" class="btn-soc btn-soc-primary">
+          <i class="fas fa-save me-1"></i>Mettre à jour
+        </button>
+      </form>
+    </div>
+
+    <!-- MFA TOTP Section -->
+    <div class="card-section mt-3">
+      <div class="section-title"><i class="fas fa-mobile-alt me-2" style="color:var(--blue);"></i>Authentification MFA (TOTP)</div>
+
+      {% if totp_qr %}
+      <!-- QR code display after /profile/setup_totp -->
+      <div style="text-align:center; margin-bottom:16px;">
+        <img src="data:image/png;base64,{{ totp_qr }}" style="border-radius:8px; width:180px; height:180px;">
+        <div style="font-size:0.75rem; color:var(--muted); margin-top:8px;">Scanner avec Google Authenticator / Authy / FreeOTP</div>
+        <div style="font-family:monospace; font-size:0.72rem; color:var(--blue); margin-top:4px; word-break:break-all;">
+          Clé manuelle : {{ totp_secret }}
+        </div>
+      </div>
+      <form method="POST" action="/profile/verify_totp" class="d-flex gap-2 mb-3">
+        <input type="text" name="totp_code" maxlength="6" placeholder="Code à 6 chiffres"
+               style="background:var(--bg3);border:1px solid var(--border);color:var(--text);border-radius:6px;padding:8px 12px;font-size:0.9rem;width:180px;outline:none;letter-spacing:4px;text-align:center;">
+        <button type="submit" class="btn-soc btn-soc-primary">
+          <i class="fas fa-check me-1"></i>Vérifier
+        </button>
+      </form>
+      <form method="POST" action="/profile/disable_totp">
+        <button type="submit" class="btn-soc" style="font-size:0.78rem; color:var(--red); border-color:rgba(248,81,73,0.3);">
+          <i class="fas fa-times me-1"></i>Désactiver MFA
+        </button>
+      </form>
+      {% else %}
+        {% set users_data = current_user %}
+        <div style="font-size:0.83rem; color:var(--muted); margin-bottom:14px;">
+          {% if current_user.get('totp_secret') %}
+          <span style="color:var(--green);"><i class="fas fa-check-circle me-1"></i>MFA activé</span>
+          — votre compte est protégé par une deuxième étape d'authentification.
+          {% else %}
+          <span style="color:var(--orange);"><i class="fas fa-exclamation-triangle me-1"></i>MFA non configuré</span>
+          — recommandé pour les comptes L2 et L3.
+          {% endif %}
+        </div>
+        {% if current_user.get('totp_secret') %}
+        <a href="/profile/setup_totp" class="btn-soc btn-soc-primary me-2" style="font-size:0.8rem;">
+          <i class="fas fa-qrcode me-1"></i>Voir le QR code
+        </a>
+        <form method="POST" action="/profile/disable_totp" style="display:inline;">
+          <button type="submit" class="btn-soc" style="font-size:0.78rem; color:var(--red); border-color:rgba(248,81,73,0.3);">
+            <i class="fas fa-times me-1"></i>Désactiver MFA
+          </button>
+        </form>
+        {% else %}
+        <a href="/profile/setup_totp" class="btn-soc btn-soc-primary" style="font-size:0.8rem;">
+          <i class="fas fa-qrcode me-1"></i>Configurer MFA
+        </a>
+        {% endif %}
+      {% endif %}
+    </div>
+
+  </div>
+</div>
+{% endblock %}

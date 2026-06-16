@@ -1,0 +1,237 @@
+{% extends "base.html" %}
+{% block title %}Tailscale{% endblock %}
+{% block content %}
+
+{% set role_meta = {
+  'SOC':       ('fas fa-shield-alt',      'var(--blue)'),
+  'Victime':   ('fas fa-server',          'var(--orange)'),
+  'Attaquant': ('fas fa-skull-crossbones','var(--red)'),
+  'Autre':     ('fas fa-question-circle', 'var(--muted)')
+} %}
+
+<!-- Panneau de configuration des rôles -->
+<div class="card-section mb-4">
+  <div class="section-title mb-3"><i class="fas fa-sliders-h me-2"></i>Configuration des adresses IP &amp; rôles</div>
+  <p style="font-size:0.82rem; color:var(--muted); margin-bottom:16px;">
+    <i class="fas fa-info-circle me-1" style="color:var(--yellow);"></i>
+    Les IPs Tailscale peuvent changer à chaque reconnexion. Mets à jour ici pour que le SOC sache qui est qui.
+  </p>
+
+  <form id="vm-config-form">
+    <div class="row g-3">
+      {% set vm_list = [
+        ('vm_soc',       'SOC',       'fas fa-shield-alt',      'var(--blue)'),
+        ('vm_victime',   'Victime',   'fas fa-server',          'var(--orange)'),
+        ('vm_attaquant', 'Attaquant', 'fas fa-skull-crossbones','var(--red)')
+      ] %}
+      {% for vm_key, default_role, icon, color in vm_list %}
+      {% set cfg = vm_config.get(vm_key, {}) %}
+      <div class="col-md-4">
+        <div style="background:var(--bg3); border-radius:10px; padding:16px; border:1px solid var(--border);">
+          <div class="d-flex align-items-center gap-2 mb-3">
+            <i class="{{ icon }}" style="color:{{ color }}; font-size:1.1rem;"></i>
+            <span style="font-weight:600; color:{{ color }};">{{ default_role }}</span>
+          </div>
+
+          <div class="mb-2">
+            <label style="font-size:0.75rem; color:var(--muted);">Adresse IP Tailscale</label>
+            <div class="d-flex gap-2 mt-1">
+              <input type="text" id="ip_{{ vm_key }}" value="{{ cfg.get('ip','') }}"
+                placeholder="100.x.x.x"
+                style="flex:1; background:var(--bg-card); border:1px solid var(--border); color:var(--text); border-radius:6px; padding:5px 10px; font-family:monospace; font-size:0.88rem;">
+              <button type="button" onclick="detectIP('{{ vm_key }}')"
+                style="background:var(--bg-card); border:1px solid var(--border); color:var(--muted); border-radius:6px; padding:4px 8px; font-size:0.75rem; cursor:pointer;">
+                <i class="fas fa-sync-alt"></i>
+              </button>
+            </div>
+          </div>
+
+          <div class="mb-2">
+            <label style="font-size:0.75rem; color:var(--muted);">Hostname</label>
+            <input type="text" id="hn_{{ vm_key }}" value="{{ cfg.get('hostname','') }}"
+              placeholder="ex: kali"
+              style="width:100%; background:var(--bg-card); border:1px solid var(--border); color:var(--text); border-radius:6px; padding:5px 10px; font-size:0.82rem; margin-top:4px;">
+          </div>
+
+          <div>
+            <label style="font-size:0.75rem; color:var(--muted);">Rôle</label>
+            <select id="role_{{ vm_key }}"
+              style="width:100%; background:var(--bg-card); border:1px solid var(--border); color:var(--text); border-radius:6px; padding:5px 8px; font-size:0.82rem; margin-top:4px;">
+              {% for r in vm_roles %}
+              <option value="{{ r }}" {% if cfg.get('role', default_role) == r %}selected{% endif %}>{{ r }}</option>
+              {% endfor %}
+            </select>
+          </div>
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+
+    <div class="d-flex align-items-center gap-3 mt-3">
+      <button type="button" onclick="saveVMConfig()"
+        style="background:var(--blue); color:#fff; border:none; border-radius:8px; padding:8px 20px; font-size:0.85rem; cursor:pointer;">
+        <i class="fas fa-save me-2"></i>Enregistrer la configuration
+      </button>
+      <span id="save-status" style="font-size:0.8rem; color:var(--green); display:none;">
+        <i class="fas fa-check me-1"></i>Sauvegardé
+      </span>
+    </div>
+  </form>
+</div>
+
+<!-- Machines détectées en temps réel -->
+<div class="card-section mb-4">
+  <div class="d-flex justify-content-between align-items-center mb-3">
+    <div class="section-title mb-0"><i class="fas fa-network-wired me-2"></i>Machines détectées — Tailscale</div>
+    <span style="color:var(--muted); font-size:0.8rem;">{{ machines|length }} machine(s)</span>
+  </div>
+  <div class="row g-3">
+    {% for m in machines %}
+    {% set meta = role_meta.get(m.role, role_meta['Autre']) %}
+    <div class="col-md-4">
+      <div style="background:var(--bg3); border-radius:10px; padding:16px; border:1px solid var(--border);">
+        <div class="d-flex align-items-center gap-2 mb-3">
+          <i class="{{ meta[0] }}" style="color:{{ meta[1] }}; font-size:1.2rem;"></i>
+          <div>
+            <div style="font-weight:600; color:{{ meta[1] }};">{{ m.role }}</div>
+            <div style="font-size:0.75rem; color:var(--muted);">{{ m.hostname }}</div>
+          </div>
+          <div class="ms-auto">
+            {% if m.online %}
+            <span><span class="live-dot me-1"></span><span style="color:var(--green); font-size:0.78rem;">En ligne</span></span>
+            {% else %}
+            <span><span class="offline-dot me-1"></span><span style="color:var(--muted); font-size:0.78rem;">Hors ligne</span></span>
+            {% endif %}
+          </div>
+        </div>
+        <div style="font-family:monospace; font-size:0.9rem; color:var(--blue); margin-bottom:6px;">
+          {{ m.ip }}
+          <button onclick="copyIP('{{ m.ip }}')" title="Copier l'IP"
+            style="background:none; border:none; color:var(--muted); cursor:pointer; font-size:0.75rem; margin-left:6px;">
+            <i class="fas fa-copy"></i>
+          </button>
+        </div>
+        {% if m.vm_tools %}
+        <div style="font-size:0.75rem; color:var(--muted);">{{ m.vm_tools }}</div>
+        {% endif %}
+        <div style="font-size:0.72rem; color:var(--muted); margin-top:4px;"><i class="fas fa-desktop me-1"></i>{{ m.os }} · {{ m.user }}</div>
+
+        <!-- Bouton raccourci : "Utiliser cette IP comme Victime/Attaquant" -->
+        <div class="d-flex gap-1 mt-2 flex-wrap">
+          <button onclick="assignRole('{{ m.ip }}', '{{ m.hostname }}', 'vm_victime', 'Victime')"
+            style="font-size:0.7rem; background:var(--bg-card); border:1px solid var(--border); color:var(--orange); border-radius:5px; padding:2px 8px; cursor:pointer;">
+            → Victime
+          </button>
+          <button onclick="assignRole('{{ m.ip }}', '{{ m.hostname }}', 'vm_attaquant', 'Attaquant')"
+            style="font-size:0.7rem; background:var(--bg-card); border:1px solid var(--border); color:var(--red); border-radius:5px; padding:2px 8px; cursor:pointer;">
+            → Attaquant
+          </button>
+          <button onclick="assignRole('{{ m.ip }}', '{{ m.hostname }}', 'vm_soc', 'SOC')"
+            style="font-size:0.7rem; background:var(--bg-card); border:1px solid var(--border); color:var(--blue); border-radius:5px; padding:2px 8px; cursor:pointer;">
+            → SOC
+          </button>
+        </div>
+      </div>
+    </div>
+    {% endfor %}
+
+    {% if machines|length == 0 %}
+    <div class="col-12">
+      <div class="empty-state"><i class="fas fa-exclamation-triangle fa-2x mb-2" style="color:var(--yellow); display:block;"></i>
+        <p style="color:var(--muted);">Aucune machine Tailscale détectée</p>
+        <code style="font-size:0.8rem;">tailscale up</code>
+      </div>
+    </div>
+    {% endif %}
+  </div>
+</div>
+
+<!-- Flux de données -->
+<div class="card-section">
+  <div class="section-title"><i class="fas fa-route me-2"></i>Flux de données</div>
+  {% set soc_ip      = vm_config.get('vm_soc',       {}).get('ip', '100.x.x.x') %}
+  {% set victime_ip  = vm_config.get('vm_victime',   {}).get('ip', '100.x.x.x') %}
+  {% set attaquant_ip= vm_config.get('vm_attaquant', {}).get('ip', '100.x.x.x') %}
+  <div style="font-size:0.82rem; color:var(--muted); font-family:monospace; background:var(--bg3); padding:16px; border-radius:8px; line-height:2.2;">
+    <span style="color:var(--red);">VM1 Attaquant</span>
+    <span style="color:var(--muted); font-size:0.75rem;"> [{{ attaquant_ip }}]</span>
+    &nbsp;→ attaque →&nbsp;
+    <span style="color:var(--orange);">VM2 Victime</span>
+    <span style="color:var(--muted); font-size:0.75rem;"> [{{ victime_ip }}]</span>
+    <br>
+    <span style="color:var(--orange);">VM2 Filebeat</span>
+    <span style="color:var(--muted);"> ──── Tailscale ──► </span>
+    <span style="color:var(--muted); font-size:0.75rem;">{{ soc_ip }}</span>
+    <span style="color:var(--muted);">:5044 ──► </span>
+    <span style="color:var(--blue);">Logstash → Elasticsearch</span>
+    <br>
+    <span style="color:var(--muted); padding-left:200px;">↓ &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;↓</span>
+    <br>
+    <span style="color:var(--purple);">Isolation Forest</span>
+    <span style="color:var(--muted);">&nbsp;&nbsp;&nbsp;&nbsp;</span>
+    <span style="color:var(--green);">Kibana</span>
+    <br>
+    <span style="color:var(--muted); padding-left:170px;">↓</span>
+    <br>
+    <span style="color:var(--orange);">Flask Dashboard</span>
+    <span style="color:var(--muted);">&nbsp;+&nbsp;</span>
+    <span style="color:var(--yellow);">CVE Scanner</span>
+    <span style="color:var(--muted);">&nbsp;+&nbsp;</span>
+    <span style="color:var(--purple);">Rate Detector</span>
+    <span style="color:var(--muted);">&nbsp;→&nbsp;</span>
+    <span style="color:var(--red);">Incidents</span>
+  </div>
+</div>
+
+<script>
+function saveVMConfig() {
+  const keys = ['vm_soc', 'vm_victime', 'vm_attaquant'];
+  const data = {};
+  keys.forEach(k => {
+    data[k] = {
+      ip:       document.getElementById('ip_'   + k)?.value.trim() || '',
+      hostname: document.getElementById('hn_'   + k)?.value.trim() || '',
+      role:     document.getElementById('role_' + k)?.value        || 'Autre',
+    };
+  });
+  fetch('/api/vm_config', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify(data)
+  }).then(r => r.json()).then(() => {
+    const s = document.getElementById('save-status');
+    s.style.display = 'inline';
+    setTimeout(() => { s.style.display = 'none'; location.reload(); }, 1200);
+  });
+}
+
+function assignRole(ip, hostname, vmKey, role) {
+  document.getElementById('ip_'   + vmKey).value = ip;
+  document.getElementById('hn_'   + vmKey).value = hostname;
+  document.getElementById('role_' + vmKey).value = role;
+  saveVMConfig();
+}
+
+function detectIP(vmKey) {
+  // Propose les IPs des machines détectées dans une liste
+  const detected = [
+    {% for m in machines %}'{{ m.ip }}',{% endfor %}
+  ];
+  if (detected.length === 0) { alert('Aucune machine Tailscale détectée.'); return; }
+  const ip = detected.length === 1
+    ? detected[0]
+    : prompt('IPs disponibles :\n' + detected.join('\n') + '\n\nEntrer l\'IP :', detected[0]);
+  if (ip) document.getElementById('ip_' + vmKey).value = ip.trim();
+}
+
+function copyIP(ip) {
+  navigator.clipboard.writeText(ip).then(() => {
+    const el = document.createElement('span');
+    el.textContent = ' Copié!';
+    el.style.cssText = 'color:var(--green);font-size:0.75rem;';
+    event.target.after(el);
+    setTimeout(() => el.remove(), 1500);
+  });
+}
+</script>
+{% endblock %}

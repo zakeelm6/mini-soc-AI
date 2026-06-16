@@ -1,0 +1,217 @@
+{% extends "base.html" %}
+{% block title %}File de priorité SOC{% endblock %}
+{% block content %}
+
+<div class="d-flex align-items-center justify-content-between mb-3 flex-wrap gap-2">
+  <div>
+    <div style="font-size:1.1rem; font-weight:600;">
+      <i class="fas fa-stream me-2" style="color:var(--orange);"></i>File de priorité — Incidents SOC
+    </div>
+    <div style="font-size:0.78rem; color:var(--muted);" id="queue-subtitle">
+      Triés par : sévérité (40%) + score IA (35%) + âge (25%) + bonus llama3
+    </div>
+  </div>
+  <div class="d-flex gap-2 flex-wrap">
+    {% if current_user.level in ('L2','L3') %}
+    <select id="assigneeFilter" onchange="loadQueue()" style="background:var(--bg3);border:1px solid var(--border);color:var(--text);border-radius:6px;padding:6px 10px;font-size:0.8rem;outline:none;">
+      <option value="">Tous les analystes</option>
+    </select>
+    {% endif %}
+    <button onclick="loadQueue()" class="btn-soc btn-soc-primary" style="font-size:0.8rem;">
+      <i class="fas fa-sync-alt me-1"></i>Actualiser
+    </button>
+    {% if current_user.level == 'L3' %}
+    <button onclick="trainMeta()" class="btn-soc" style="font-size:0.8rem; border-color:var(--purple); color:var(--purple);" id="trainBtn">
+      <i class="fas fa-brain me-1"></i>Entraîner Meta-learner
+    </button>
+    {% endif %}
+  </div>
+</div>
+
+<!-- Meta-learner stats panel -->
+<div class="card-section mb-3" id="metaPanel">
+  <div class="d-flex align-items-center justify-content-between mb-2">
+    <div class="section-title" style="margin-bottom:0;">
+      <i class="fas fa-brain me-1" style="color:var(--purple);"></i>Meta-learner — Précision par modèle
+    </div>
+    <span id="metaStatus" style="font-size:0.75rem; color:var(--muted);">Chargement…</span>
+  </div>
+  <div id="metaContent" style="font-size:0.82rem; color:var(--muted);">Chargement…</div>
+</div>
+
+<!-- Priority queue table -->
+<div class="card-section p-0">
+  <div style="padding:12px 16px; border-bottom:1px solid var(--border); display:flex; align-items:center; justify-content:space-between;">
+    <div style="font-size:0.8rem; color:var(--muted);" id="queue-count">—</div>
+    <div style="display:flex; gap:12px; font-size:0.72rem; color:var(--muted);">
+      <span><span style="color:var(--red);">●</span> SLA dépassé</span>
+      <span><span style="color:var(--orange);">●</span> SLA < 15min</span>
+      <span><span style="color:var(--green);">●</span> SLA OK</span>
+    </div>
+  </div>
+  <table style="width:100%; border-collapse:collapse; font-size:0.81rem;" id="queueTable">
+    <thead>
+      <tr style="background:var(--bg3);">
+        <th style="padding:9px 12px; color:var(--muted); font-weight:500; border-bottom:1px solid var(--border); width:40px;">#</th>
+        <th style="padding:9px 12px; color:var(--muted); font-weight:500; border-bottom:1px solid var(--border);">Incident</th>
+        <th style="padding:9px 12px; color:var(--muted); font-weight:500; border-bottom:1px solid var(--border); width:90px;">Sévérité</th>
+        <th style="padding:9px 12px; color:var(--muted); font-weight:500; border-bottom:1px solid var(--border); width:100px;">Priorité</th>
+        <th style="padding:9px 12px; color:var(--muted); font-weight:500; border-bottom:1px solid var(--border); width:110px;">SLA restant</th>
+        <th style="padding:9px 12px; color:var(--muted); font-weight:500; border-bottom:1px solid var(--border); width:80px;">Score IA</th>
+        <th style="padding:9px 12px; color:var(--muted); font-weight:500; border-bottom:1px solid var(--border); width:130px;">Assigné à</th>
+        <th style="padding:9px 12px; color:var(--muted); font-weight:500; border-bottom:1px solid var(--border); width:100px;">llama3</th>
+        <th style="padding:9px 12px; color:var(--muted); font-weight:500; border-bottom:1px solid var(--border); width:60px;"></th>
+      </tr>
+    </thead>
+    <tbody id="queueBody"><tr><td colspan="9" style="padding:30px; text-align:center; color:var(--muted);">Chargement…</td></tr></tbody>
+  </table>
+</div>
+
+<style>
+.priority-bar { height:6px; border-radius:3px; background:var(--border); position:relative; overflow:hidden; }
+.priority-fill { height:100%; border-radius:3px; transition:width .3s; }
+</style>
+
+<script>
+const SEV_COLORS = { critical:'var(--red)', high:'var(--orange)', medium:'var(--blue)', low:'var(--muted)' };
+const LEVEL_USER = '{{ current_user.level }}';
+
+function slaColor(inc) {
+  if (inc.sla_breached)       return 'var(--red)';
+  if (inc.sla_remaining < 15) return 'var(--orange)';
+  return 'var(--green)';
+}
+
+function slaText(inc) {
+  if (inc.sla_breached) return `<span style="color:var(--red); font-weight:700;">+${inc.age_min - (inc.age_min - inc.sla_remaining)}min dépassé</span>`;
+  const h = Math.floor(inc.sla_remaining / 60), m = inc.sla_remaining % 60;
+  const txt = h > 0 ? `${h}h${m < 10 ? '0'+m : m}` : `${m}min`;
+  return `<span style="color:${slaColor(inc)};">${txt}</span>`;
+}
+
+function priorityBar(p) {
+  const pct = Math.round(p * 100);
+  const color = p >= 0.7 ? 'var(--red)' : p >= 0.4 ? 'var(--orange)' : 'var(--green)';
+  return `<div style="display:flex; align-items:center; gap:6px;">
+    <div class="priority-bar" style="width:60px;">
+      <div class="priority-fill" style="width:${pct}%; background:${color};"></div>
+    </div>
+    <span style="font-size:0.72rem; color:${color}; font-weight:600;">${pct}%</span>
+  </div>`;
+}
+
+async function loadQueue() {
+  const sel = document.getElementById('assigneeFilter');
+  const assignee = sel ? encodeURIComponent(sel.value) : '';
+  const url = '/api/priority_queue' + (assignee ? `?assignee=${assignee}` : '');
+  const r = await fetch(url).then(r => r.json());
+  if (r.error) { document.getElementById('queueBody').innerHTML = `<tr><td colspan="9" style="padding:20px; color:var(--red);">${r.error}</td></tr>`; return; }
+
+  document.getElementById('queue-count').textContent = `${r.total} incident(s) ouverts`;
+
+  // Populate assignee filter
+  if (sel && sel.options.length <= 1) {
+    const names = [...new Set(r.incidents.map(i => i.assigned_to).filter(Boolean))];
+    names.forEach(n => { const o = new Option(n, n); sel.appendChild(o); });
+  }
+
+  if (!r.incidents.length) {
+    document.getElementById('queueBody').innerHTML = '<tr><td colspan="9" style="padding:30px; text-align:center; color:var(--muted);"><i class="fas fa-check-circle me-2" style="color:var(--green);"></i>Aucun incident ouvert</td></tr>';
+    return;
+  }
+
+  let html = '';
+  r.incidents.forEach((inc, idx) => {
+    const sev   = inc.severity || 'medium';
+    const color = SEV_COLORS[sev] || 'var(--text)';
+    const llm   = inc.llm_verdict === 'true_positive'  ? `<span style="color:var(--red); font-size:0.72rem;">TP ✓</span>`
+                : inc.llm_verdict === 'false_positive' ? `<span style="color:var(--muted); font-size:0.72rem;">FP ✗</span>`
+                : inc.auto_labeled ? `<span style="color:var(--blue); font-size:0.72rem;">auto</span>`
+                : `<span style="color:var(--muted); font-size:0.72rem;">—</span>`;
+    const rowBg = inc.sla_breached ? 'rgba(248,81,73,0.04)' : '';
+    html += `<tr style="border-bottom:1px solid var(--border); background:${rowBg}; cursor:pointer;"
+                onclick="window.location='/incidents/${inc.id}'">
+      <td style="padding:8px 12px; color:var(--muted); font-size:0.75rem;">${idx+1}</td>
+      <td style="padding:8px 12px;">
+        <div style="font-weight:600; font-size:0.82rem;">${inc.incident_id}</div>
+        <div style="color:var(--muted); font-size:0.72rem; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:280px;">${inc.title}</div>
+        ${inc.src_ip ? `<div style="font-family:monospace; font-size:0.7rem; color:var(--red);">${inc.src_ip}</div>` : ''}
+      </td>
+      <td style="padding:8px 12px;">
+        <span style="font-size:0.72rem; font-weight:700; color:${color}; padding:2px 8px; border-radius:10px; background:${color}22;">${sev.toUpperCase()}</span>
+      </td>
+      <td style="padding:8px 12px;">${priorityBar(inc.priority)}</td>
+      <td style="padding:8px 12px;">${slaText(inc)}</td>
+      <td style="padding:8px 12px; font-family:monospace; font-size:0.78rem; color:var(--blue);">${inc.score ? parseFloat(inc.score).toFixed(1) : '—'}</td>
+      <td style="padding:8px 12px; font-size:0.78rem;">
+        ${inc.assigned_to || '—'}
+        ${inc.level ? `<span class="badge-level badge-${inc.level} ms-1">${inc.level}</span>` : ''}
+      </td>
+      <td style="padding:8px 12px;">${llm}</td>
+      <td style="padding:8px 12px;">
+        <a href="/incidents/${inc.id}" onclick="event.stopPropagation()" class="btn-soc" style="padding:3px 8px; font-size:0.68rem;">
+          <i class="fas fa-external-link-alt"></i>
+        </a>
+      </td>
+    </tr>`;
+  });
+  document.getElementById('queueBody').innerHTML = html;
+}
+
+async function loadMetaStats() {
+  const d = await fetch('/api/meta_learner/stats').then(r => r.json());
+  const el = document.getElementById('metaContent');
+  const st = document.getElementById('metaStatus');
+
+  if (d.status === 'not_trained') {
+    el.innerHTML = `<span style="color:var(--orange);">${d.message}</span>`;
+    st.textContent = 'Non entraîné';
+    return;
+  }
+  if (d.error) { el.textContent = d.error; return; }
+
+  st.innerHTML = `<span style="color:var(--green);">✓ ${d.n_samples} incidents labellisés</span>`;
+
+  const models = d.models || {};
+  let html = '<div class="d-flex gap-4 flex-wrap">';
+  const colors = { IF:'var(--blue)', RF:'var(--green)', DL:'var(--purple)', Rate:'var(--orange)', Meta:'var(--red)' };
+  for (const [name, s] of Object.entries(models)) {
+    const c = colors[name] || 'var(--text)';
+    const f1pct = Math.round((s.f1 || 0) * 100);
+    html += `<div style="min-width:110px; background:var(--bg3); border:1px solid var(--border); border-radius:8px; padding:10px 14px; text-align:center;">
+      <div style="font-size:0.7rem; color:var(--muted); margin-bottom:4px;">${name === 'Meta' ? '⭐ Meta-learner' : name}</div>
+      <div style="font-size:1.4rem; font-weight:700; color:${c};">${f1pct}%</div>
+      <div style="font-size:0.68rem; color:var(--muted);">F1 score</div>
+      <div style="font-size:0.68rem; color:var(--muted); margin-top:2px;">P:${Math.round((s.precision||0)*100)}% R:${Math.round((s.recall||0)*100)}%</div>
+    </div>`;
+  }
+  html += '</div>';
+
+  if (d.dynamic_weights) {
+    const w = d.dynamic_weights;
+    html += `<div style="margin-top:10px; font-size:0.75rem; color:var(--muted);">
+      Poids dynamiques appris : IF×${w.w_if} · RF×${w.w_rf} · DL×${w.w_dl} · Rate×${w.w_rate}
+      <span style="margin-left:8px; color:var(--muted);">(vs fixes : IF×0.30 · RF×0.35 · DL×0.20 · Rate×0.15)</span>
+    </div>`;
+  }
+  el.innerHTML = html;
+}
+
+async function trainMeta() {
+  const btn = document.getElementById('trainBtn');
+  btn.disabled = true;
+  btn.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>Entraînement…';
+  const r = await fetch('/api/meta_learner/train', {method:'POST'}).then(r => r.json());
+  setTimeout(() => {
+    btn.disabled = false;
+    btn.innerHTML = '<i class="fas fa-brain me-1"></i>Entraîner Meta-learner';
+    loadMetaStats();
+  }, 8000);
+}
+
+loadQueue();
+loadMetaStats();
+setInterval(loadQueue, 30000);
+</script>
+
+{% endblock %}

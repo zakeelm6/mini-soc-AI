@@ -1,0 +1,293 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Mini-SOC — Connexion</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+  <style>
+    :root {
+      --bg: #0d1117; --bg2: #161b22; --bg3: #21262d;
+      --border: #30363d; --text: #c9d1d9; --muted: #8b949e;
+      --blue: #58a6ff; --green: #3fb950; --red: #f85149;
+      --orange: #ffa657; --purple: #d2a8ff;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      background: var(--bg); color: var(--text);
+      font-family: 'Segoe UI', system-ui, sans-serif;
+      min-height: 100vh; display: flex;
+    }
+
+    /* ── LEFT PANEL ─────────────────────────────────────────────── */
+    .left-panel {
+      width: 420px; flex-shrink: 0;
+      background: var(--bg2);
+      border-right: 1px solid var(--border);
+      display: flex; flex-direction: column;
+      padding: 40px 36px;
+      position: relative; overflow: hidden;
+    }
+    .left-panel::before {
+      content: '';
+      position: absolute; inset: 0;
+      background:
+        radial-gradient(ellipse 60% 40% at 20% 20%, rgba(88,166,255,0.08) 0%, transparent 60%),
+        radial-gradient(ellipse 50% 30% at 80% 80%, rgba(210,168,255,0.07) 0%, transparent 60%);
+      pointer-events: none;
+    }
+    .brand-logo {
+      display: flex; align-items: center; gap: 14px; margin-bottom: 40px; position: relative;
+    }
+    .shield-icon {
+      width: 48px; height: 48px;
+      background: rgba(88,166,255,0.12);
+      border: 1px solid rgba(88,166,255,0.3);
+      border-radius: 14px;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 1.3rem; color: var(--blue);
+      flex-shrink: 0;
+    }
+    .brand-title { font-size: 1.5rem; font-weight: 800; color: var(--blue); letter-spacing: 1px; line-height: 1; }
+    .brand-sub   { font-size: 0.72rem; color: var(--muted); margin-top: 3px; letter-spacing: 0.5px; }
+
+    .panel-heading {
+      font-size: 1.05rem; font-weight: 700; color: var(--text); margin-bottom: 8px; position: relative;
+    }
+    .panel-desc {
+      font-size: 0.8rem; color: var(--muted); line-height: 1.6; margin-bottom: 32px; position: relative;
+    }
+
+    .feature-list { list-style: none; position: relative; }
+    .feature-list li {
+      display: flex; align-items: flex-start; gap: 12px;
+      padding: 10px 0; border-bottom: 1px solid rgba(48,54,61,0.5);
+      font-size: 0.8rem; color: var(--muted);
+    }
+    .feature-list li:last-child { border-bottom: none; }
+    .feature-icon {
+      width: 28px; height: 28px; border-radius: 8px; flex-shrink: 0;
+      display: flex; align-items: center; justify-content: center; font-size: 0.75rem;
+    }
+    .feature-list li strong { color: var(--text); font-weight: 600; display: block; margin-bottom: 1px; }
+
+    .panel-footer {
+      margin-top: auto; padding-top: 24px; border-top: 1px solid var(--border);
+      display: flex; flex-wrap: wrap; gap: 12px; position: relative;
+    }
+    .access-level {
+      display: flex; align-items: center; gap: 6px;
+      background: var(--bg3); border: 1px solid var(--border);
+      border-radius: 8px; padding: 6px 12px; font-size: 0.74rem;
+    }
+    .lbadge { font-size: 0.6rem; font-weight: 700; padding: 2px 7px; border-radius: 8px; }
+    .l1 { background: rgba(88,166,255,0.15); color: var(--blue); }
+    .l2 { background: rgba(255,166,87,0.15); color: var(--orange); }
+    .l3 { background: rgba(248,81,73,0.15); color: var(--red); }
+
+    /* ── RIGHT PANEL (FORM) ─────────────────────────────────────── */
+    .right-panel {
+      flex: 1;
+      display: flex; align-items: center; justify-content: center;
+      padding: 40px 20px;
+      background: var(--bg);
+    }
+    .form-box { width: 100%; max-width: 380px; }
+    .form-title { font-size: 1.1rem; font-weight: 700; color: var(--text); margin-bottom: 4px; }
+    .form-sub   { font-size: 0.78rem; color: var(--muted); margin-bottom: 28px; }
+
+    .field-label {
+      font-size: 0.72rem; color: var(--muted); text-transform: uppercase;
+      letter-spacing: 0.8px; margin-bottom: 6px; display: block;
+    }
+    .field-wrap { position: relative; margin-bottom: 16px; }
+    .field-icon {
+      position: absolute; left: 13px; top: 50%; transform: translateY(-50%);
+      color: var(--muted); font-size: 0.8rem; pointer-events: none;
+    }
+    .form-ctrl {
+      background: var(--bg2); border: 1px solid var(--border); color: var(--text);
+      border-radius: 9px; padding: 11px 14px 11px 38px;
+      font-size: 0.88rem; width: 100%; outline: none;
+      transition: border-color .2s, box-shadow .2s;
+    }
+    .form-ctrl:focus { border-color: var(--blue); box-shadow: 0 0 0 3px rgba(88,166,255,0.1); }
+    .form-ctrl.no-icon { padding-left: 14px; }
+
+    .mfa-box {
+      background: rgba(88,166,255,0.06);
+      border: 1px solid rgba(88,166,255,0.3);
+      border-radius: 10px; padding: 16px;
+      margin-bottom: 16px;
+    }
+    .mfa-label { font-size: 0.74rem; color: var(--blue); margin-bottom: 8px; display: flex; align-items: center; gap: 6px; }
+    .mfa-hint  { font-size: 0.7rem; color: var(--muted); margin-top: 6px; }
+
+    .btn-login {
+      background: var(--blue); color: #0d1117;
+      border: none; border-radius: 9px;
+      padding: 12px; font-size: 0.9rem; font-weight: 700;
+      width: 100%; cursor: pointer;
+      transition: opacity .2s, transform .1s;
+      display: flex; align-items: center; justify-content: center; gap: 8px;
+    }
+    .btn-login:hover { opacity: 0.88; }
+    .btn-login:active { transform: scale(0.99); }
+
+    .alert-err {
+      background: rgba(248,81,73,0.08);
+      border: 1px solid rgba(248,81,73,0.4);
+      border-radius: 9px; padding: 11px 14px;
+      font-size: 0.82rem; color: var(--red);
+      margin-bottom: 20px;
+      display: flex; align-items: center; gap: 8px;
+    }
+
+    .divider { border-top: 1px solid var(--border); margin: 24px 0; }
+    .hint-link { font-size: 0.74rem; color: var(--muted); text-align: center; }
+    .hint-link a { color: var(--blue); text-decoration: none; }
+    .hint-link a:hover { text-decoration: underline; }
+
+    /* Responsive */
+    @media (max-width: 768px) {
+      .left-panel { display: none; }
+      .right-panel { padding: 24px 16px; }
+    }
+  </style>
+</head>
+<body>
+
+<!-- Left panel -->
+<div class="left-panel">
+  <div class="brand-logo">
+    <div class="shield-icon"><i class="fas fa-shield-alt"></i></div>
+    <div>
+      <div class="brand-title">Mini-SOC</div>
+      <div class="brand-sub">Security Operations Center</div>
+    </div>
+  </div>
+
+  <div class="panel-heading">Plateforme SOC intelligente</div>
+  <div class="panel-desc">
+    Détection en temps réel, analyse IA multi-modèles et gestion des incidents de sécurité pour votre infrastructure.
+  </div>
+
+  <ul class="feature-list">
+    <li>
+      <div class="feature-icon" style="background:rgba(88,166,255,0.12);color:var(--blue);">
+        <i class="fas fa-brain"></i>
+      </div>
+      <div>
+        <strong>Détection IA multi-modèles</strong>
+        Isolation Forest, Autoencoder DL, Random Forest + méta-learner
+      </div>
+    </li>
+    <li>
+      <div class="feature-icon" style="background:rgba(63,185,80,0.12);color:var(--green);">
+        <i class="fas fa-stream"></i>
+      </div>
+      <div>
+        <strong>Pipeline ELK temps réel</strong>
+        Filebeat → Logstash → Elasticsearch → détection automatique
+      </div>
+    </li>
+    <li>
+      <div class="feature-icon" style="background:rgba(210,168,255,0.12);color:var(--purple);">
+        <i class="fas fa-robot"></i>
+      </div>
+      <div>
+        <strong>Analyse LLM (llama3)</strong>
+        Verdicts IA via Ollama, few-shot learning, scoring unifié
+      </div>
+    </li>
+    <li>
+      <div class="feature-icon" style="background:rgba(255,166,87,0.12);color:var(--orange);">
+        <i class="fas fa-ticket-alt"></i>
+      </div>
+      <div>
+        <strong>Gestion des incidents RBAC</strong>
+        Workflow L1/L2/L3, assignation, notifications email
+      </div>
+    </li>
+  </ul>
+
+  <div class="panel-footer">
+    <div class="access-level">
+      <span class="lbadge l1">L1</span>
+      <span style="color:var(--muted);">Analyste</span>
+    </div>
+    <div class="access-level">
+      <span class="lbadge l2">L2</span>
+      <span style="color:var(--muted);">Senior</span>
+    </div>
+    <div class="access-level">
+      <span class="lbadge l3">L3</span>
+      <span style="color:var(--muted);">Admin</span>
+    </div>
+  </div>
+</div>
+
+<!-- Right panel (form) -->
+<div class="right-panel">
+  <div class="form-box">
+
+    <div class="form-title">{% if need_totp %}Authentification MFA{% else %}Connexion{% endif %}</div>
+    <div class="form-sub">
+      {% if need_totp %}Entrez le code à 6 chiffres de votre application authenticator{% else %}Entrez vos identifiants SOC pour accéder à la plateforme{% endif %}
+    </div>
+
+    {% if error %}
+    <div class="alert-err">
+      <i class="fas fa-exclamation-circle"></i>{{ error }}
+    </div>
+    {% endif %}
+
+    <form method="POST">
+      <div class="field-wrap">
+        <label class="field-label">Identifiant</label>
+        <i class="fas fa-user field-icon"></i>
+        <input type="text" name="username" class="form-ctrl"
+               placeholder="admin, analyst1, senior1…"
+               value="{{ username or '' }}"
+               {% if need_totp %}readonly{% endif %}
+               autofocus autocomplete="username">
+      </div>
+
+      <div class="field-wrap">
+        <label class="field-label">Mot de passe</label>
+        <i class="fas fa-lock field-icon"></i>
+        <input type="password" name="password" class="form-ctrl"
+               placeholder="••••••••"
+               {% if need_totp %}style="opacity:.4;" readonly{% endif %}
+               autocomplete="current-password">
+      </div>
+
+      {% if need_totp %}
+      <div class="mfa-box">
+        <div class="mfa-label"><i class="fas fa-mobile-alt"></i>Code d'authentification (MFA)</div>
+        <input type="text" name="totp_code" class="form-ctrl no-icon"
+               placeholder="1 2 3 4 5 6"
+               maxlength="6" inputmode="numeric" autofocus autocomplete="one-time-code"
+               style="letter-spacing:10px; font-size:1.2rem; text-align:center; font-weight:700;">
+        <div class="mfa-hint"><i class="fas fa-info-circle me-1"></i>Code à 6 chiffres depuis votre application authenticator</div>
+      </div>
+      {% else %}
+      <input type="hidden" name="totp_code" value="">
+      {% endif %}
+
+      <button type="submit" class="btn-login">
+        <i class="fas {% if need_totp %}fa-key{% else %}fa-sign-in-alt{% endif %}"></i>
+        {% if need_totp %}Valider le code{% else %}Se connecter{% endif %}
+      </button>
+    </form>
+
+    <div class="divider"></div>
+    <div class="hint-link">
+      Projet PFA — SOC &amp; Intelligence Artificielle &nbsp;·&nbsp; <span style="color:var(--blue);">v2.0</span>
+    </div>
+  </div>
+</div>
+
+</body>
+</html>

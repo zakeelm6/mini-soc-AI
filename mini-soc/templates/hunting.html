@@ -1,0 +1,297 @@
+{% extends "base.html" %}
+{% block title %}Threat Hunting{% endblock %}
+{% block content %}
+<style>
+  .hunt-editor {
+    background: #0d1117; border: 1px solid var(--border); border-radius: 8px;
+    font-family: 'Courier New', monospace; font-size: 0.83rem; color: #e6edf3;
+    padding: 14px; width: 100%; min-height: 160px; resize: vertical; outline: none;
+    line-height: 1.6;
+  }
+  .hunt-editor:focus { border-color: var(--blue); }
+  .result-cell { max-width: 260px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 0.75rem; }
+  .preset-btn { font-size: 0.72rem; padding: 3px 10px; background: var(--bg3); border: 1px solid var(--border); color: var(--muted); border-radius: 6px; cursor: pointer; }
+  .preset-btn:hover { border-color: var(--blue); color: var(--blue); }
+  #hunt-results tbody tr:hover td { background: rgba(88,166,255,0.04); }
+  .field-pill { display:inline-block; background:rgba(88,166,255,0.1); color:var(--blue); border:1px solid rgba(88,166,255,0.25); border-radius:10px; padding:1px 7px; font-size:0.65rem; font-family:monospace; margin:1px; }
+</style>
+
+<div class="d-flex justify-content-between align-items-center mb-3">
+  <div>
+    <h5 style="color:var(--text);margin:0;font-weight:700;">
+      <i class="fas fa-crosshairs me-2" style="color:var(--purple);"></i>Threat Hunting
+    </h5>
+    <div style="font-size:0.72rem;color:var(--muted);margin-top:2px;">Requêtes Elasticsearch libres — L2/L3 only</div>
+  </div>
+  <span style="font-size:0.75rem;color:var(--muted);">{{ indices|length }} index disponibles</span>
+</div>
+
+<div class="row g-3">
+  <!-- Left: Query editor -->
+  <div class="col-md-8">
+    <div class="card-section" style="padding:18px 22px;">
+      <div class="section-title mb-3"><i class="fas fa-code me-2"></i>Requête Elasticsearch (JSON)</div>
+
+      <!-- Index + size -->
+      <div class="row g-2 mb-3">
+        <div class="col-md-5">
+          <label style="font-size:0.72rem;color:var(--muted);">Index cible</label>
+          <select id="hunt-index" class="form-select form-select-sm mt-1" style="background:var(--bg3);color:var(--text);border-color:var(--border);">
+            <option value="soc-logs-*">soc-logs-* (tous les logs)</option>
+            <option value="soc-anomalies">soc-anomalies</option>
+            <option value="soc-incidents">soc-incidents</option>
+            <option value="soc-postexploit-events">soc-postexploit-events</option>
+            <option value="soc-blocked-ips">soc-blocked-ips</option>
+            <option value="soc-cve-alerts">soc-cve-alerts</option>
+            <option value="soc-audit-log">soc-audit-log</option>
+            {% for idx in indices %}
+            <option value="{{ idx.index }}">{{ idx.index }} ({{ idx['docs.count'] }} docs)</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="col-md-3">
+          <label style="font-size:0.72rem;color:var(--muted);">Résultats max</label>
+          <select id="hunt-size" class="form-select form-select-sm mt-1" style="background:var(--bg3);color:var(--text);border-color:var(--border);">
+            <option value="20">20</option>
+            <option value="50" selected>50</option>
+            <option value="100">100</option>
+            <option value="500">500</option>
+          </select>
+        </div>
+        <div class="col-md-4 d-flex align-items-end gap-2">
+          <button onclick="runHunt()" class="btn-soc btn-soc-primary flex-grow-1" style="justify-content:center;">
+            <i class="fas fa-play me-1"></i>Exécuter
+          </button>
+          <button onclick="clearResults()" class="btn-soc" style="padding:5px 10px;">
+            <i class="fas fa-trash"></i>
+          </button>
+        </div>
+      </div>
+
+      <!-- Presets -->
+      <div class="mb-2" style="font-size:0.72rem;color:var(--muted);">Requêtes prédéfinies :</div>
+      <div class="d-flex flex-wrap gap-1 mb-3">
+        <button class="preset-btn" onclick="setPreset('brute_force')">Brute force SSH</button>
+        <button class="preset-btn" onclick="setPreset('critical_logs')">Logs critiques 24h</button>
+        <button class="preset-btn" onclick="setPreset('new_ips')">Nouvelles IPs</button>
+        <button class="preset-btn" onclick="setPreset('failed_auth')">Auth échouées</button>
+        <button class="preset-btn" onclick="setPreset('pe_lateral')">Lateral movement</button>
+        <button class="preset-btn" onclick="setPreset('high_score')">Score anomalie élevé</button>
+        <button class="preset-btn" onclick="setPreset('all_recent')">Tous récents</button>
+      </div>
+
+      <!-- Editor -->
+      <textarea id="hunt-query" class="hunt-editor" spellcheck="false" placeholder='{ "match_all": {} }'></textarea>
+
+      <div id="hunt-error" style="display:none;margin-top:8px;color:var(--red);font-size:0.78rem;background:rgba(248,81,73,0.06);border-radius:6px;padding:8px 12px;"></div>
+    </div>
+  </div>
+
+  <!-- Right: Index list + tips -->
+  <div class="col-md-4">
+    <div class="card-section" style="padding:14px 18px;margin-bottom:14px;">
+      <div class="section-title mb-2" style="font-size:0.78rem;"><i class="fas fa-database me-2"></i>Index disponibles</div>
+      {% for idx in indices %}
+      <div style="display:flex;justify-content:space-between;font-size:0.72rem;padding:3px 0;border-bottom:1px solid var(--border);">
+        <span style="font-family:monospace;color:var(--blue);">{{ idx.index }}</span>
+        <span style="color:var(--muted);">{{ idx['docs.count'] }} docs · {{ idx['store.size'] }}</span>
+      </div>
+      {% endfor %}
+    </div>
+    <div class="card-section" style="padding:14px 18px;">
+      <div class="section-title mb-2" style="font-size:0.78rem;"><i class="fas fa-lightbulb me-2"></i>Champs utiles</div>
+      <div style="font-size:0.7rem;color:var(--muted);line-height:1.8;">
+        <div><span class="field-pill">src_ip</span> <span class="field-pill">@timestamp</span> <span class="field-pill">severity</span></div>
+        <div><span class="field-pill">log_type</span> <span class="field-pill">message</span> <span class="field-pill">tags</span></div>
+        <div><span class="field-pill">technique</span> <span class="field-pill">tactic</span> <span class="field-pill">status</span></div>
+        <div><span class="field-pill">anomaly_score</span> <span class="field-pill">verdict</span> <span class="field-pill">assigned_to</span></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Results -->
+<div id="hunt-results-section" style="display:none;" class="mt-3">
+  <div class="card-section" style="padding:0;overflow:hidden;">
+    <div class="d-flex justify-content-between align-items-center" style="padding:12px 18px;border-bottom:1px solid var(--border);">
+      <div style="font-size:0.82rem;color:var(--text);">
+        <i class="fas fa-list me-2" style="color:var(--purple);"></i>
+        Résultats : <strong id="hunt-count">0</strong> hits
+        <span id="hunt-index-lbl" style="color:var(--muted);font-size:0.72rem;"></span>
+      </div>
+      <button onclick="exportHuntCSV()" class="btn-soc" style="font-size:0.72rem;padding:3px 10px;">
+        <i class="fas fa-download me-1"></i>CSV
+      </button>
+    </div>
+    <div style="overflow-x:auto;max-height:500px;overflow-y:auto;">
+      <table class="table soc-table mb-0" id="hunt-results">
+        <thead id="hunt-head"></thead>
+        <tbody id="hunt-body"></tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<script>
+const PRESETS = {
+  brute_force: {
+    index: "soc-logs-*",
+    query: {
+      "bool": {
+        "must": [
+          {"match": {"message": "Failed"}},
+          {"term":  {"log_type": "auth"}},
+          {"range": {"@timestamp": {"gte": "now-24h"}}}
+        ]
+      }
+    }
+  },
+  critical_logs: {
+    index: "soc-logs-*",
+    query: {
+      "bool": {
+        "must": [
+          {"terms": {"severity": ["critical","high"]}},
+          {"range": {"@timestamp": {"gte": "now-24h"}}}
+        ]
+      }
+    }
+  },
+  new_ips: {
+    index: "soc-anomalies",
+    query: {"range": {"@timestamp": {"gte": "now-7d"}}}
+  },
+  failed_auth: {
+    index: "soc-logs-*",
+    query: {
+      "bool": {
+        "should": [
+          {"match": {"message": "authentication failure"}},
+          {"match": {"message": "Invalid user"}},
+          {"term":  {"tags": "auth_failure"}}
+        ],
+        "minimum_should_match": 1
+      }
+    }
+  },
+  pe_lateral: {
+    index: "soc-postexploit-events",
+    query: {
+      "bool": {
+        "should": [
+          {"term": {"tactic": "lateral_movement"}},
+          {"term": {"tactic": "privilege_escalation"}}
+        ],
+        "minimum_should_match": 1
+      }
+    }
+  },
+  high_score: {
+    index: "soc-anomalies",
+    query: {"range": {"anomaly_score": {"gte": 0.8}}}
+  },
+  all_recent: {
+    index: "soc-logs-*",
+    query: {"range": {"@timestamp": {"gte": "now-1h"}}}
+  }
+};
+
+let _lastHits = [];
+let _lastCols = [];
+
+function setPreset(name) {
+  const p = PRESETS[name];
+  if (!p) return;
+  document.getElementById('hunt-index').value = p.index;
+  document.getElementById('hunt-query').value = JSON.stringify(p.query, null, 2);
+}
+
+async function runHunt() {
+  const index = document.getElementById('hunt-index').value;
+  const size  = parseInt(document.getElementById('hunt-size').value);
+  const rawQ  = document.getElementById('hunt-query').value.trim() || '{}';
+  const errEl = document.getElementById('hunt-error');
+  errEl.style.display = 'none';
+
+  let query;
+  try { query = JSON.parse(rawQ); }
+  catch(e) { errEl.textContent = 'JSON invalide: ' + e.message; errEl.style.display='block'; return; }
+
+  document.getElementById('hunt-results-section').style.display = 'none';
+
+  try {
+    const r = await fetch('/api/hunting/query', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({index, size, query})
+    });
+    const d = await r.json();
+    if (!r.ok) { errEl.textContent = 'Erreur: ' + (d.error || r.status); errEl.style.display='block'; return; }
+
+    _lastHits = d.hits || [];
+    renderResults(_lastHits, d.total, index);
+  } catch(e) {
+    errEl.textContent = 'Erreur réseau: ' + e.message; errEl.style.display='block';
+  }
+}
+
+function renderResults(hits, total, index) {
+  const section = document.getElementById('hunt-results-section');
+  document.getElementById('hunt-count').textContent = total.toLocaleString();
+  document.getElementById('hunt-index-lbl').textContent = ` — ${index}`;
+
+  // Detect columns from first hit
+  const excludeKeys = ['_id','_index','_score','message'];
+  if (!hits.length) {
+    document.getElementById('hunt-head').innerHTML = '';
+    document.getElementById('hunt-body').innerHTML = '<tr><td colspan="5" style="text-align:center;color:var(--muted);padding:30px;">Aucun résultat</td></tr>';
+    section.style.display = 'block';
+    return;
+  }
+  const allKeys = [...new Set(hits.flatMap(h => Object.keys(h)))];
+  const priorityKeys = ['@timestamp','src_ip','severity','log_type','technique','tactic','status','anomaly_score','title','incident_id'];
+  const colKeys = [...priorityKeys.filter(k => allKeys.includes(k)),
+                   ...allKeys.filter(k => !priorityKeys.includes(k) && !excludeKeys.includes(k))].slice(0,8);
+  _lastCols = colKeys;
+
+  // Head
+  document.getElementById('hunt-head').innerHTML = '<tr>' +
+    colKeys.map(k => `<th style="font-size:0.72rem;">${k}</th>`).join('') +
+    '<th style="font-size:0.72rem;">Message</th></tr>';
+
+  // Body
+  document.getElementById('hunt-body').innerHTML = hits.map(h => '<tr>' +
+    colKeys.map(k => `<td class="result-cell" title="${esc(String(h[k]||''))}">${esc(String(h[k]||''))}</td>`).join('') +
+    `<td class="result-cell" title="${esc(h.message||'')}">${esc((h.message||'').slice(0,120))}</td>` +
+    '</tr>').join('');
+
+  section.style.display = 'block';
+}
+
+function esc(s) {
+  return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+function clearResults() {
+  document.getElementById('hunt-query').value = '';
+  document.getElementById('hunt-results-section').style.display = 'none';
+  document.getElementById('hunt-error').style.display = 'none';
+  _lastHits = [];
+}
+
+function exportHuntCSV() {
+  if (!_lastHits.length) return;
+  const cols = [..._lastCols, 'message'];
+  const rows = [cols.join(',')];
+  _lastHits.forEach(h => {
+    rows.push(cols.map(c => '"' + String(h[c]||'').replace(/"/g,'""').replace(/\n/g,' ') + '"').join(','));
+  });
+  const blob = new Blob([rows.join('\n')], {type:'text/csv'});
+  const a = document.createElement('a'); a.href = URL.createObjectURL(blob);
+  a.download = 'hunt_results.csv'; a.click();
+}
+
+// Default query
+document.getElementById('hunt-query').value = JSON.stringify({"match_all": {}}, null, 2);
+</script>
+{% endblock %}

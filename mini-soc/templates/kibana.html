@@ -1,0 +1,335 @@
+{% extends "base.html" %}
+{% block title %}Kibana — Index & Dashboards{% endblock %}
+{% block content %}
+
+<div class="d-flex justify-content-between align-items-center mb-4">
+  <div>
+    <h5 style="margin:0;font-weight:700;">
+      <i class="fas fa-chart-bar me-2" style="color:var(--yellow);"></i>Kibana — Index Patterns & Dashboards
+    </h5>
+    <div style="font-size:0.78rem;color:var(--muted);margin-top:2px;">
+      7 index patterns disponibles ·
+      <span id="kibana-status-badge" style="display:inline-flex;align-items:center;gap:4px;font-size:0.72rem;">
+        <span class="live-dot" style="width:6px;height:6px;"></span>
+        <span id="kibana-status-lbl">Vérification…</span>
+      </span>
+    </div>
+  </div>
+  <div class="d-flex gap-2">
+    <a href="/kibana-sso?next={{ kibana_base }}/app/dashboards" target="_blank" class="btn-soc btn-soc-primary">
+      <i class="fas fa-sign-in-alt me-1"></i>Ouvrir Kibana (SSO)
+    </a>
+    <a href="/kibana-sso?next={{ kibana_base }}/app/discover" target="_blank" class="btn-soc" style="color:var(--blue);border-color:var(--blue);">
+      <i class="fas fa-search me-1"></i>Discover
+    </a>
+  </div>
+</div>
+
+<!-- Index Patterns -->
+<div class="card-section mb-4">
+  <div class="section-title"><i class="fas fa-database me-1"></i>Index Patterns disponibles</div>
+  <div class="row g-3">
+    {% for idx in indices %}
+    {% set colors = {'blue':'var(--blue)','red':'var(--red)','purple':'var(--purple)','green':'var(--green)','orange':'var(--orange)','yellow':'var(--yellow)'} %}
+    {% set c = colors.get(idx.color, 'var(--blue)') %}
+    <div class="col-md-6 col-lg-4">
+      <div style="background:var(--bg3);border:1px solid var(--border);border-radius:10px;padding:16px;height:100%;border-left:3px solid {{ c }};">
+        <div style="display:flex;align-items:center;gap-10px;margin-bottom:10px;">
+          <div style="width:32px;height:32px;background:rgba(88,166,255,0.1);border-radius:8px;display:flex;align-items:center;justify-content:center;flex-shrink:0;margin-right:10px;">
+            <i class="fas {{ idx.icon }}" style="color:{{ c }};font-size:0.85rem;"></i>
+          </div>
+          <div style="flex:1;min-width:0;">
+            <div style="font-family:monospace;font-size:0.82rem;font-weight:700;color:{{ c }};white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">{{ idx.title }}</div>
+            <div style="font-size:0.65rem;color:var(--muted);">{{ "{:,}".format(idx.doc_count) }} documents</div>
+          </div>
+        </div>
+        <div style="font-size:0.75rem;color:var(--muted);margin-bottom:10px;line-height:1.5;">{{ idx.description }}</div>
+        <div style="margin-bottom:10px;">
+          <div style="font-size:0.65rem;text-transform:uppercase;letter-spacing:1px;color:var(--muted);margin-bottom:5px;">Champs clés</div>
+          <div style="display:flex;flex-wrap:wrap;gap:4px;">
+            {% for field in idx.fields %}
+            <span style="background:var(--bg2);border:1px solid var(--border);border-radius:4px;font-size:0.62rem;font-family:monospace;padding:2px 6px;color:var(--muted);">{{ field }}</span>
+            {% endfor %}
+          </div>
+        </div>
+        <div style="display:flex;gap:6px;flex-wrap:wrap;">
+          <a href="{{ kibana_base }}/app/discover#/?_g=()&_a=(index:'{{ idx.id }}')" target="_blank"
+             class="btn-soc" style="font-size:0.72rem;padding:5px 10px;">
+            <i class="fas fa-search" style="font-size:0.65rem;"></i>Discover
+          </a>
+          <a href="{{ kibana_base }}/app/visualize#/new?type=lens&savedSearchId=&indexPatternId={{ idx.id }}" target="_blank"
+             class="btn-soc" style="font-size:0.72rem;padding:5px 10px;">
+            <i class="fas fa-chart-bar" style="font-size:0.65rem;"></i>Visualize
+          </a>
+        </div>
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+</div>
+
+<!-- Dashboard guide -->
+<div class="row g-3 mb-4">
+  <div class="col-lg-6">
+    <div class="card-section h-100">
+      <div class="section-title"><i class="fas fa-tachometer-alt me-1"></i>Dashboards recommandés à créer</div>
+
+      {% set dashboards = [
+        {
+          'title': 'SSH Brute Force Overview',
+          'color': 'red',
+          'icon': 'fa-terminal',
+          'index': 'soc-logs-*',
+          'charts': [
+            'Histogram @timestamp — SSH Failed (tag:sshd + Failed password)',
+            'Data table : top src_ip (Count DESC)',
+            'Data table : top ssh_user (Count DESC)',
+            'Metric : total SSH failed 24h',
+            'Line chart : tentatives / heure'
+          ]
+        },
+        {
+          'title': 'Anomalies ML — Vue globale',
+          'color': 'purple',
+          'icon': 'fa-brain',
+          'index': 'soc-ensemble-anomalies',
+          'charts': [
+            'Histogram : ensemble_score par heure',
+            'Pie chart : severity (critical/high/medium)',
+            'Data table : top src_ip par score',
+            'Bar chart : votes par modèle (vote_if/vote_rf/vote_dl)',
+            'Metric : alertes critiques 24h'
+          ]
+        },
+        {
+          'title': 'Incidents SOC',
+          'color': 'orange',
+          'icon': 'fa-ticket-alt',
+          'index': 'soc-incidents',
+          'charts': [
+            'Metric : incidents ouverts (status:awaiting_action)',
+            'Pie chart : répartition par severity',
+            'Bar chart : verdicts LLM (TP / FP / uncertain)',
+            'Data table : incidents récents — src_ip, verdict, score',
+            'Metric : auto-étiquetés par IA (auto_labeled:true)'
+          ]
+        },
+        {
+          'title': 'Comparaison Modèles',
+          'color': 'blue',
+          'icon': 'fa-balance-scale',
+          'index': 'soc-ensemble-anomalies',
+          'charts': [
+            'Line chart superposé : if_score / rf_score / dl_score',
+            'Bar chart : distribution des votes (0→4)',
+            'Scatter : if_score vs rf_score',
+            'Histogram : ensemble_score par 0.1 bucket',
+            'Data table : top IPs multi-modèles'
+          ]
+        }
+      ] %}
+
+      <div style="display:flex;flex-direction:column;gap:10px;">
+        {% for db in dashboards %}
+        {% set colors = {'red':'var(--red)','purple':'var(--purple)','orange':'var(--orange)','blue':'var(--blue)','green':'var(--green)','yellow':'var(--yellow)'} %}
+        {% set c = colors.get(db.color, 'var(--blue)') %}
+        <div style="background:var(--bg3);border:1px solid var(--border);border-radius:8px;padding:12px;">
+          <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">
+            <i class="fas {{ db.icon }}" style="color:{{ c }};width:16px;text-align:center;"></i>
+            <span style="font-size:0.82rem;font-weight:700;color:{{ c }};">{{ db.title }}</span>
+            <span class="type-mono" style="margin-left:auto;font-size:0.62rem;">{{ db.index }}</span>
+          </div>
+          <div style="display:flex;flex-wrap:wrap;gap:4px;">
+            {% for chart in db.charts %}
+            <span style="background:var(--bg2);border:1px solid var(--border);border-radius:12px;font-size:0.65rem;color:var(--muted);padding:2px 8px;">
+              <i class="fas fa-chart-line me-1" style="font-size:0.55rem;"></i>{{ chart }}
+            </span>
+            {% endfor %}
+          </div>
+        </div>
+        {% endfor %}
+      </div>
+    </div>
+  </div>
+
+  <div class="col-lg-6">
+    <div class="card-section h-100">
+      <div class="section-title"><i class="fas fa-terminal me-1"></i>Requêtes KQL utiles</div>
+      <div style="display:flex;flex-direction:column;gap:8px;">
+
+        {% set queries = [
+          {
+            'title': 'SSH Failed toutes IPs',
+            'index': 'soc-logs-*',
+            'kql': 'tags: "sshd" AND message: "Failed password"',
+            'color': 'red'
+          },
+          {
+            'title': 'SSH depuis IP attaquante',
+            'index': 'soc-logs-*',
+            'kql': 'src_ip: "192.168.122.231" OR src_ip: "192.168.122.1"',
+            'color': 'red'
+          },
+          {
+            'title': 'Incidents critiques non fermés',
+            'index': 'soc-incidents',
+            'kql': 'severity: "critical" AND NOT status: "closed"',
+            'color': 'orange'
+          },
+          {
+            'title': 'Incidents auto-étiquetés par IA',
+            'index': 'soc-incidents',
+            'kql': 'auto_labeled: true',
+            'color': 'green'
+          },
+          {
+            'title': 'Verdicts LLM vrais positifs',
+            'index': 'soc-incidents',
+            'kql': 'llm_verdict: "true_positive" AND llm_confidence >= 0.75',
+            'color': 'green'
+          },
+          {
+            'title': 'Ensemble score critique (>0.7)',
+            'index': 'soc-ensemble-anomalies',
+            'kql': 'ensemble_score >= 0.7',
+            'color': 'purple'
+          },
+          {
+            'title': 'Anomalies DL haute perte',
+            'index': 'soc-dl-anomalies',
+            'kql': 'severity: "critical" OR severity: "high"',
+            'color': 'orange'
+          },
+          {
+            'title': 'CVE critiques (CVSS ≥ 9)',
+            'index': 'soc-cve-alerts',
+            'kql': 'cvss_score >= 9',
+            'color': 'yellow'
+          },
+        ] %}
+
+        {% for q in queries %}
+        {% set colors = {'red':'var(--red)','purple':'var(--purple)','orange':'var(--orange)','blue':'var(--blue)','green':'var(--green)','yellow':'var(--yellow)'} %}
+        {% set c = colors.get(q.color, 'var(--blue)') %}
+        <div style="background:var(--bg3);border:1px solid var(--border);border-radius:8px;padding:10px 12px;">
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:5px;">
+            <span style="font-size:0.78rem;color:{{ c }};font-weight:600;">{{ q.title }}</span>
+            <span class="type-mono" style="font-size:0.60rem;">{{ q.index }}</span>
+          </div>
+          <div style="background:var(--bg);border-radius:5px;padding:6px 10px;font-family:monospace;font-size:0.72rem;color:var(--text);display:flex;align-items:center;justify-content:space-between;gap:8px;">
+            <span id="kql-{{ loop.index }}" style="flex:1;word-break:break-all;">{{ q.kql }}</span>
+            <button onclick="copyKQL('kql-{{ loop.index }}')" style="background:none;border:1px solid var(--border);color:var(--muted);border-radius:4px;padding:2px 7px;font-size:0.65rem;cursor:pointer;flex-shrink:0;">
+              <i class="fas fa-copy"></i>
+            </button>
+          </div>
+        </div>
+        {% endfor %}
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Quick links -->
+<div class="card-section">
+  <div class="section-title"><i class="fas fa-link me-1"></i>Liens rapides Kibana</div>
+  <div class="row g-2">
+    {% set kb = kibana_base %}
+    {% set links = [
+      {'label': 'Discover — SSH Failed', 'icon': 'fa-terminal', 'color': 'red',
+       'href': "/kibana-sso?next=" + kb + "/app/discover%23/%3F_g%3D(filters%3A!(),time%3A(from%3Anow-24h,to%3Anow))"},
+      {'label': 'Discover — Incidents', 'icon': 'fa-ticket-alt', 'color': 'orange',
+       'href': "/kibana-sso?next=" + kb + "/app/discover"},
+      {'label': 'Discover — Anomalies', 'icon': 'fa-layer-group', 'color': 'yellow',
+       'href': "/kibana-sso?next=" + kb + "/app/discover"},
+      {'label': 'Lens — Créer visuel', 'icon': 'fa-chart-bar', 'color': 'blue',
+       'href': "/kibana-sso?next=" + kb + "/app/lens"},
+      {'label': 'Dashboards', 'icon': 'fa-tachometer-alt', 'color': 'purple',
+       'href': "/kibana-sso?next=" + kb + "/app/dashboards"},
+      {'label': 'Index Management', 'icon': 'fa-database', 'color': 'muted',
+       'href': "/kibana-sso?next=" + kb + "/app/management/data/index_management"},
+    ] %}
+    {% for lnk in links %}
+    {% set colors = {'red':'var(--red)','purple':'var(--purple)','orange':'var(--orange)','blue':'var(--blue)','green':'var(--green)','yellow':'var(--yellow)','muted':'var(--muted)'} %}
+    {% set c = colors.get(lnk.color, 'var(--blue)') %}
+    <div class="col-6 col-md-4 col-lg-2">
+      <a href="{{ lnk.href }}" target="_blank" class="btn-soc w-100 justify-content-center" style="flex-direction:column;padding:14px 10px;gap:6px;text-align:center;border-color:{{ c }}20;">
+        <i class="fas {{ lnk.icon }}" style="color:{{ c }};font-size:1.1rem;"></i>
+        <span style="font-size:0.72rem;">{{ lnk.label }}</span>
+      </a>
+    </div>
+    {% endfor %}
+  </div>
+</div>
+
+<!-- Kibana embedded iframe (after SSO) -->
+<div class="card-section mt-4" style="padding:0;overflow:hidden;">
+  <div style="padding:12px 18px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center;">
+    <div class="section-title mb-0">
+      <i class="fas fa-tv me-2" style="color:var(--yellow);"></i>Kibana intégré
+      <span style="font-size:0.7rem;color:var(--muted);font-weight:400;margin-left:8px;">— Ouvrir le SSO d'abord pour s'authentifier</span>
+    </div>
+    <div class="d-flex gap-2 align-items-center">
+      <select id="kib-page" class="form-select form-select-sm" style="width:200px;background:var(--bg3);color:var(--text);border-color:var(--border);font-size:0.75rem;"
+              onchange="loadKibanaFrame()">
+        <option value="/app/dashboards">Dashboards</option>
+        <option value="/app/discover">Discover</option>
+        <option value="/app/lens">Lens</option>
+        <option value="/app/management/data/index_management">Index Management</option>
+      </select>
+      <button onclick="loadKibanaFrame()" class="btn-soc btn-soc-primary" style="font-size:0.75rem;padding:4px 12px;">
+        <i class="fas fa-play me-1"></i>Charger
+      </button>
+    </div>
+  </div>
+  <div id="kib-placeholder" style="padding:40px;text-align:center;color:var(--muted);">
+    <i class="fas fa-sign-in-alt" style="font-size:2rem;margin-bottom:12px;display:block;color:var(--yellow);"></i>
+    <div style="font-size:0.85rem;margin-bottom:14px;">Cliquez sur <strong style="color:var(--text);">Ouvrir Kibana (SSO)</strong> pour vous authentifier,<br>puis revenez ici et cliquez <strong style="color:var(--text);">Charger</strong> pour intégrer Kibana.</div>
+    <a href="/kibana-sso?next={{ kibana_base }}/app/dashboards" target="_blank" class="btn-soc btn-soc-primary">
+      <i class="fas fa-sign-in-alt me-1"></i>Ouvrir Kibana (SSO) ↗
+    </a>
+  </div>
+  <iframe id="kib-frame" src="" style="display:none;width:100%;height:700px;border:none;"
+          title="Kibana embedded" allow="fullscreen"></iframe>
+</div>
+
+<script>
+function copyKQL(id) {
+  const txt = document.getElementById(id).textContent;
+  navigator.clipboard.writeText(txt).then(() => {
+    const btn = document.querySelector(`[onclick="copyKQL('${id}')"]`);
+    const orig = btn.innerHTML;
+    btn.innerHTML = '<i class="fas fa-check" style="color:var(--green);"></i>';
+    setTimeout(() => btn.innerHTML = orig, 1500);
+  });
+}
+
+async function checkKibanaStatus() {
+  const lbl  = document.getElementById('kibana-status-lbl');
+  const dot  = document.querySelector('#kibana-status-badge .live-dot, #kibana-status-badge .offline-dot');
+  try {
+    const d = await fetch('/api/kibana/status').then(r => r.json());
+    if (d.up) {
+      lbl.textContent = `Kibana ${d.version} — ${d.status}`;
+      lbl.style.color = 'var(--green)';
+    } else {
+      lbl.textContent = 'Kibana indisponible';
+      lbl.style.color = 'var(--red)';
+    }
+  } catch(e) {
+    lbl.textContent = 'Kibana indisponible';
+    lbl.style.color = 'var(--red)';
+  }
+}
+
+function loadKibanaFrame() {
+  const page  = document.getElementById('kib-page').value;
+  const frame = document.getElementById('kib-frame');
+  const ph    = document.getElementById('kib-placeholder');
+  frame.src   = '{{ kibana_base }}' + page;
+  frame.style.display = 'block';
+  ph.style.display    = 'none';
+}
+
+checkKibanaStatus();
+</script>
+{% endblock %}

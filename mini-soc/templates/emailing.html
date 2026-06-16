@@ -1,0 +1,197 @@
+{% extends "base.html" %}
+{% block title %}Emailing — Mini-SOC{% endblock %}
+{% block content %}
+<style>
+  .email-card {
+    background: var(--bg2); border: 1px solid var(--border);
+    border-radius: 10px; overflow: hidden;
+  }
+  .email-row {
+    display: flex; align-items: center; gap: 14px;
+    padding: 13px 18px; border-bottom: 1px solid rgba(255,255,255,0.04);
+    transition: background 0.15s;
+  }
+  .email-row:hover { background: var(--bg3); }
+  .email-icon {
+    width: 34px; height: 34px; border-radius: 8px; flex-shrink: 0;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 0.85rem;
+  }
+  .icon-ok   { background: rgba(159,239,0,0.1);  color: var(--green);  border: 1px solid rgba(159,239,0,0.25); }
+  .icon-fail { background: rgba(255,71,87,0.12);  color: var(--red);    border: 1px solid rgba(255,71,87,0.3); }
+  .icon-na   { background: rgba(100,100,100,0.1); color: var(--muted);  border: 1px solid var(--border); }
+  .ev-badge  {
+    padding: 2px 8px; border-radius: 4px; font-size: 0.62rem; font-weight: 700;
+    font-family: 'JetBrains Mono', monospace; letter-spacing: 0.3px;
+  }
+  .ev-new_incident  { background: rgba(255,71,87,0.12); color: var(--red); }
+  .ev-assigned      { background: rgba(0,217,255,0.08); color: var(--cyan); }
+  .ev-escalated     { background: rgba(255,107,53,0.1); color: var(--orange); }
+  .ev-test          { background: rgba(100,100,100,0.1); color: var(--muted); }
+  .ev-other         { background: rgba(159,239,0,0.08); color: var(--green); }
+  .stat-box {
+    background: var(--bg2); border: 1px solid var(--border); border-radius: 8px;
+    padding: 14px 20px; text-align: center;
+  }
+  .stat-val { font-size: 1.8rem; font-weight: 800; font-family: 'JetBrains Mono', monospace; }
+  .stat-lbl { font-size: 0.68rem; color: var(--muted); margin-top: 4px; }
+  .empty-state { padding: 60px 20px; text-align: center; color: var(--muted); }
+  .empty-state i { font-size: 2rem; margin-bottom: 12px; display: block; }
+  .to-pill {
+    display: inline-flex; align-items: center; gap: 4px;
+    background: rgba(0,217,255,0.06); color: var(--cyan);
+    border: 1px solid rgba(0,217,255,0.2); border-radius: 4px;
+    padding: 1px 8px; font-size: 0.65rem; font-family: 'JetBrains Mono', monospace;
+  }
+</style>
+
+<div class="page-header">
+  <div>
+    <h1 class="page-title"><i class="fas fa-envelope" style="color:var(--cyan);margin-right:10px;"></i>Emailing</h1>
+    <p class="page-subtitle">Historique des emails envoyés automatiquement par la plateforme</p>
+  </div>
+  <div style="display:flex;gap:8px;align-items:center;">
+    <span style="font-size:0.65rem;color:var(--muted);font-family:'JetBrains Mono',monospace;">
+      <i class="fas fa-sync me-1" id="spin-icon"></i>Dernière MàJ : <span id="last-refresh">—</span>
+    </span>
+    <button onclick="loadEmails()" class="btn-secondary" style="font-size:0.72rem;padding:5px 14px;">
+      <i class="fas fa-sync me-1"></i>Rafraîchir
+    </button>
+  </div>
+</div>
+
+<!-- Stats -->
+<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:18px;">
+  <div class="stat-box">
+    <div class="stat-val" id="stat-total" style="color:var(--cyan);">—</div>
+    <div class="stat-lbl"><i class="fas fa-envelope me-1"></i>Emails envoyés</div>
+  </div>
+  <div class="stat-box">
+    <div class="stat-val" id="stat-ok" style="color:var(--green);">—</div>
+    <div class="stat-lbl"><i class="fas fa-check me-1"></i>Succès</div>
+  </div>
+  <div class="stat-box">
+    <div class="stat-val" id="stat-fail" style="color:var(--red);">—</div>
+    <div class="stat-lbl"><i class="fas fa-times me-1"></i>Échecs</div>
+  </div>
+  <div class="stat-box">
+    <div class="stat-val" id="stat-events" style="color:var(--purple);">—</div>
+    <div class="stat-lbl"><i class="fas fa-tag me-1"></i>Types d'événements</div>
+  </div>
+</div>
+
+<!-- Table -->
+<div class="email-card">
+  <div style="display:flex;align-items:center;justify-content:space-between;padding:12px 18px;border-bottom:1px solid var(--border);background:var(--bg3);">
+    <div style="display:flex;align-items:center;gap:8px;">
+      <i class="fas fa-history" style="color:var(--cyan);font-size:0.8rem;"></i>
+      <span style="font-size:0.78rem;font-weight:700;color:var(--text2);font-family:'JetBrains Mono',monospace;">Journal d'envoi</span>
+    </div>
+    <div style="display:flex;gap:6px;" id="filter-bar">
+      <button class="filter-btn active" onclick="setEvFilter('all', this)" style="padding:3px 10px;border-radius:4px;font-size:0.68rem;cursor:pointer;border:1px solid var(--border);background:var(--bg3);color:var(--muted);">Tout</button>
+      <button class="filter-btn" onclick="setEvFilter('new_incident', this)" style="padding:3px 10px;border-radius:4px;font-size:0.68rem;cursor:pointer;border:1px solid var(--border);background:var(--bg3);color:var(--muted);">Nouvel incident</button>
+      <button class="filter-btn" onclick="setEvFilter('assigned', this)" style="padding:3px 10px;border-radius:4px;font-size:0.68rem;cursor:pointer;border:1px solid var(--border);background:var(--bg3);color:var(--muted);">Assignation</button>
+      <button class="filter-btn" onclick="setEvFilter('escalated', this)" style="padding:3px 10px;border-radius:4px;font-size:0.68rem;cursor:pointer;border:1px solid var(--border);background:var(--bg3);color:var(--muted);">Escalade</button>
+    </div>
+  </div>
+
+  <!-- En-tête colonnes -->
+  <div style="display:flex;padding:8px 18px;border-bottom:1px solid var(--border);background:var(--bg3);">
+    <div style="width:44px;flex-shrink:0;"></div>
+    <div style="flex:0 0 160px;font-size:0.65rem;color:var(--muted);font-family:'JetBrains Mono',monospace;">HORODATAGE</div>
+    <div style="flex:0 0 130px;font-size:0.65rem;color:var(--muted);font-family:'JetBrains Mono',monospace;">ÉVÉNEMENT</div>
+    <div style="flex:0 0 130px;font-size:0.65rem;color:var(--muted);font-family:'JetBrains Mono',monospace;">INCIDENT</div>
+    <div style="flex:1;font-size:0.65rem;color:var(--muted);font-family:'JetBrains Mono',monospace;">DESTINATAIRE</div>
+    <div style="flex:0 0 90px;font-size:0.65rem;color:var(--muted);font-family:'JetBrains Mono',monospace;text-align:right;">STATUT</div>
+  </div>
+
+  <div id="email-list">
+    <div class="empty-state"><i class="fas fa-spinner fa-spin"></i><div>Chargement…</div></div>
+  </div>
+</div>
+
+<script>
+let allEmails = [];
+let evFilter = 'all';
+
+async function loadEmails() {
+  document.getElementById('spin-icon').className = 'fas fa-spinner fa-spin me-1';
+  const r = await fetch('/api/emailing/history').then(x => x.json());
+  allEmails = r.entries || [];
+  document.getElementById('last-refresh').textContent = new Date().toLocaleTimeString('fr-FR');
+  document.getElementById('spin-icon').className = 'fas fa-sync me-1';
+
+  // Stats
+  const ok   = allEmails.filter(e => e.channels?.email === true || e.channels?.email?.ok).length;
+  const fail = allEmails.filter(e => e.channels?.email === false || e.channels?.email?.ok === false).length;
+  const evTypes = new Set(allEmails.map(e => e.event)).size;
+  document.getElementById('stat-total').textContent  = allEmails.length;
+  document.getElementById('stat-ok').textContent     = ok;
+  document.getElementById('stat-fail').textContent   = fail;
+  document.getElementById('stat-events').textContent = evTypes;
+
+  renderList();
+}
+
+function setEvFilter(f, btn) {
+  evFilter = f;
+  document.querySelectorAll('#filter-bar button').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  renderList();
+}
+
+function emailStatus(emailVal) {
+  if (emailVal === true)  return { cls: 'icon-ok',   icon: 'fas fa-check',     lbl: 'Envoyé', color: 'var(--green)' };
+  if (emailVal === false) return { cls: 'icon-fail',  icon: 'fas fa-times',     lbl: 'Échec',  color: 'var(--red)' };
+  if (typeof emailVal === 'string' && emailVal)
+                          return { cls: 'icon-ok',   icon: 'fas fa-paper-plane', lbl: emailVal.slice(0,20), color: 'var(--cyan)' };
+  return                         { cls: 'icon-na',   icon: 'fas fa-minus',     lbl: 'N/A',    color: 'var(--muted)' };
+}
+
+function evBadge(ev) {
+  const cls = ['new_incident','assigned','escalated','test'].includes(ev) ? `ev-${ev}` : 'ev-other';
+  const labels = { new_incident: 'Nouvel incident', assigned: 'Assignation', escalated: 'Escalade', test: 'Test' };
+  return `<span class="ev-badge ${cls}">${labels[ev] || ev}</span>`;
+}
+
+function renderList() {
+  const list = document.getElementById('email-list');
+  let items = allEmails;
+  if (evFilter !== 'all') items = items.filter(e => e.event === evFilter);
+
+  if (!items.length) {
+    list.innerHTML = `<div class="empty-state"><i class="fas fa-inbox"></i><div>Aucun email${evFilter !== 'all' ? ' pour ce filtre' : ''}</div></div>`;
+    return;
+  }
+
+  list.innerHTML = items.map(e => {
+    const ts    = (e.ts || '').slice(0, 19).replace('T', ' ');
+    const email = e.channels?.email;
+    const st    = emailStatus(email);
+    const to    = typeof email === 'string' && email.includes('@')
+      ? `<span class="to-pill"><i class="fas fa-at"></i>${email}</span>`
+      : `<span style="color:var(--muted);font-size:0.7rem;">—</span>`;
+    return `
+      <div class="email-row">
+        <div class="email-icon ${st.cls}"><i class="${st.icon}"></i></div>
+        <div style="flex:0 0 160px;font-size:0.72rem;color:var(--muted);font-family:'JetBrains Mono',monospace;">${ts}</div>
+        <div style="flex:0 0 130px;">${evBadge(e.event)}</div>
+        <div style="flex:0 0 130px;">
+          ${e.incident_id
+            ? `<a href="/incident/${e.incident_id}" style="color:var(--cyan);font-size:0.7rem;font-family:'JetBrains Mono',monospace;text-decoration:none;">${e.incident_id}</a>`
+            : `<span style="color:var(--muted);font-size:0.7rem;">—</span>`}
+        </div>
+        <div style="flex:1;">${to}</div>
+        <div style="flex:0 0 90px;text-align:right;">
+          <span style="font-size:0.7rem;font-weight:600;color:${st.color};">
+            <i class="${st.icon} me-1" style="font-size:0.6rem;"></i>${st.lbl}
+          </span>
+        </div>
+      </div>`;
+  }).join('');
+}
+
+loadEmails();
+setInterval(loadEmails, 60000);
+</script>
+{% endblock %}

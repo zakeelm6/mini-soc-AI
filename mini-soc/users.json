@@ -1,0 +1,34 @@
+{
+  "admin": {
+    "password": "$2b$12$V1zcdVOKvQDmMqEWpTW3H.Mg5H.k0Hh5p1fVB0g3dsy2cQzs2Jr6W",
+    "name": "Admin SOC",
+    "level": "L3",
+    "role": "admin",
+    "email": "admin@example.com",
+    "active": true
+  },
+  "analyst_l2": {
+    "password": "$2b$12$V1zcdVOKvQDmMqEWpTW3H.Mg5H.k0Hh5p1fVB0g3dsy2cQzs2Jr6W",
+    "name": "Analyste L2",
+    "level": "L2",
+    "role": "senior",
+    "email": "analyst.l2@example.com",
+    "active": true
+  },
+  "analyst_l1": {
+    "password": "$2b$12$V1zcdVOKvQDmMqEWpTW3H.Mg5H.k0Hh5p1fVB0g3dsy2cQzs2Jr6W",
+    "name": "Analyste L1",
+    "level": "L1",
+    "role": "analyst",
+    "email": "analyst.l1@example.com",
+    "active": true
+  },
+  "manager": {
+    "password": "$2b$12$V1zcdVOKvQDmMqEWpTW3H.Mg5H.k0Hh5p1fVB0g3dsy2cQzs2Jr6W",
+    "name": "Manager SOC",
+    "level": "Manager",
+    "role": "manager",
+    "email": "",
+    "active": true
+  }
+}

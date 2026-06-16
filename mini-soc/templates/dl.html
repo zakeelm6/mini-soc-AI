@@ -1,0 +1,489 @@
+{% extends "base.html" %}
+{% block title %}Autoencoder DL{% endblock %}
+{% block content %}
+<style>
+  .filter-bar { background: var(--bg2); border: 1px solid var(--border); border-radius: 10px; padding: 14px 18px; margin-bottom: 18px; }
+  .filter-bar label { font-size: 0.72rem; color: var(--muted); text-transform: uppercase; letter-spacing: 1px; display: block; margin-bottom: 4px; }
+  .f-input { background: var(--bg3); border: 1px solid var(--border); color: var(--text); border-radius: 6px; padding: 5px 10px; font-size: 0.82rem; width: 100%; }
+  .f-input:focus { outline: none; border-color: var(--purple); }
+  .f-input option { background: var(--bg3); }
+  .kpi-bar { display: flex; gap: 12px; flex-wrap: wrap; margin-bottom: 18px; }
+  .kpi-card { background: var(--bg2); border: 1px solid var(--border); border-radius: 10px; padding: 14px 20px; flex: 1; min-width: 120px; text-align: center; }
+  .kpi-card .kpi-val { font-size: 1.8rem; font-weight: 700; }
+  .kpi-card .kpi-lbl { font-size: 0.7rem; color: var(--muted); text-transform: uppercase; letter-spacing: 1px; margin-top: 4px; }
+  .score-bar-wrap { display: flex; align-items: center; gap: 6px; }
+  .score-bar { height: 6px; border-radius: 3px; background: var(--bg3); flex: 1; overflow: hidden; }
+  .score-bar-fill { height: 100%; border-radius: 3px; }
+  .label-btn { border: none; border-radius: 5px; font-size: 0.72rem; padding: 3px 8px; cursor: pointer; font-weight: 600; transition: all 0.2s; }
+  .btn-tp  { background: rgba(63,185,80,0.15); color: #3fb950; border: 1px solid #3fb950; }
+  .btn-tp:hover  { background: rgba(63,185,80,0.35); }
+  .btn-fp  { background: rgba(248,81,73,0.15); color: #f85149; border: 1px solid #f85149; }
+  .btn-fp:hover  { background: rgba(248,81,73,0.35); }
+  .btn-ben { background: rgba(88,166,255,0.15); color: #58a6ff; border: 1px solid #58a6ff; }
+  .btn-ben:hover { background: rgba(88,166,255,0.35); }
+  .pagination-bar { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-top: 12px; }
+  .page-btn { background: var(--bg3); border: 1px solid var(--border); color: var(--text); border-radius: 6px; padding: 5px 14px; font-size: 0.82rem; cursor: pointer; transition: all 0.2s; }
+  .page-btn:hover:not(:disabled) { border-color: var(--purple); color: var(--purple); }
+  .page-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+  .loading-row td { text-align: center; padding: 40px; color: var(--muted); }
+  .toast-container { position: fixed; top: 20px; right: 20px; z-index: 9999; }
+  .soc-toast { background: var(--bg2); border: 1px solid var(--border); border-radius: 8px; padding: 12px 18px; color: var(--text); font-size: 0.83rem; margin-bottom: 8px; animation: slideIn 0.3s ease; min-width: 240px; }
+  @keyframes slideIn { from { transform: translateX(100px); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
+  input[type=range] { accent-color: var(--purple); }
+  .loss-pill { display: inline-block; font-family: monospace; font-size: 0.78rem; padding: 2px 8px; border-radius: 4px; }
+</style>
+
+<div class="toast-container" id="toastContainer"></div>
+
+<div class="d-flex justify-content-between align-items-center mb-3">
+  <h5 class="mb-0"><i class="fas fa-brain me-2" style="color:var(--purple)"></i>Détection DL — Autoencoder Dense</h5>
+  <div class="d-flex gap-2">
+    <a href="#" onclick="exportCSV(event)" class="btn-soc">
+      <i class="fas fa-download me-1"></i>Exporter CSV
+    </a>
+  </div>
+</div>
+
+<!-- Metrics bar -->
+<div class="kpi-bar" id="metricsBar">
+  <div class="kpi-card"><div class="kpi-val" style="color:var(--purple)" id="m-total">—</div><div class="kpi-lbl">Détections 24h</div></div>
+  <div class="kpi-card"><div class="kpi-val" style="color:var(--blue)" id="m-labeled">—</div><div class="kpi-lbl">Vérifiés</div></div>
+  <div class="kpi-card"><div class="kpi-val" style="color:var(--green)" id="m-precision">N/A</div><div class="kpi-lbl">Precision</div></div>
+  <div class="kpi-card"><div class="kpi-val" style="color:var(--orange)" id="m-f1">N/A</div><div class="kpi-lbl">F1 Score</div></div>
+</div>
+<div class="kpi-bar mb-4">
+  <div class="kpi-card"><div class="kpi-val" style="color:var(--green)" id="m-tp">—</div><div class="kpi-lbl">TP</div></div>
+  <div class="kpi-card"><div class="kpi-val" style="color:var(--red)" id="m-fp">—</div><div class="kpi-lbl">FP</div></div>
+  <div class="kpi-card"><div class="kpi-val" style="color:var(--yellow)" id="m-fn">—</div><div class="kpi-lbl">FN estimé</div></div>
+  <div class="kpi-card"><div class="kpi-val" style="color:var(--muted)" id="m-unverified">—</div><div class="kpi-lbl">Non vérifiés</div></div>
+  <div class="kpi-card"><div class="kpi-val" style="color:var(--blue)" id="m-recall">N/A</div><div class="kpi-lbl">Recall</div></div>
+  <div class="kpi-card"><div class="kpi-val" style="color:var(--muted); font-size:1rem;" id="m-threshold">—</div><div class="kpi-lbl">Seuil MSE</div></div>
+</div>
+
+<!-- Filter bar -->
+<div class="filter-bar">
+  <div class="row g-2 align-items-end">
+    <div class="col-md-2 col-sm-6">
+      <label>Score min: <span id="lbl_min_score">0.00</span></label>
+      <input type="range" id="f_min_score" min="0" max="1" step="0.05" value="0"
+        class="f-input" style="padding:0;background:transparent;border:none"
+        oninput="document.getElementById('lbl_min_score').textContent=parseFloat(this.value).toFixed(2); debounceLoad()">
+    </div>
+    <div class="col-md-2 col-sm-6">
+      <label>Score max: <span id="lbl_max_score">1.00</span></label>
+      <input type="range" id="f_max_score" min="0" max="1" step="0.05" value="1"
+        class="f-input" style="padding:0;background:transparent;border:none"
+        oninput="document.getElementById('lbl_max_score').textContent=parseFloat(this.value).toFixed(2); debounceLoad()">
+    </div>
+    <div class="col-md-2 col-sm-6">
+      <label>IP source</label>
+      <input type="text" id="f_ip" class="f-input" placeholder="ex: 192.168.50.99" oninput="debounceLoad()">
+    </div>
+    <div class="col-md-2 col-sm-6">
+      <label>Type</label>
+      <select id="f_type" class="f-input" onchange="resetAndLoad()">
+        <option value="">Tous</option>
+        <option value="auth">auth</option>
+        <option value="apache_access">apache_access</option>
+        <option value="syslog">syslog</option>
+        <option value="suricata">suricata</option>
+      </select>
+    </div>
+    <div class="col-md-2 col-sm-6">
+      <label>Sévérité</label>
+      <select id="f_sev" class="f-input" onchange="resetAndLoad()">
+        <option value="">Toutes</option>
+        <option value="low">Low</option>
+        <option value="medium">Medium</option>
+        <option value="high">High</option>
+        <option value="critical">Critical</option>
+      </select>
+    </div>
+    <div class="col-md-2 col-sm-6">
+      <label>De</label>
+      <input type="datetime-local" id="f_from" class="f-input" onchange="resetAndLoad()">
+    </div>
+    <div class="col-md-2 col-sm-6">
+      <label>À</label>
+      <input type="datetime-local" id="f_to" class="f-input" onchange="resetAndLoad()">
+    </div>
+    <div class="col-md-1 col-sm-4">
+      <label>Par page</label>
+      <select id="f_size" class="f-input" onchange="currentSize=parseInt(this.value); resetAndLoad()">
+        <option value="25" selected>25</option>
+        <option value="50">50</option>
+        <option value="100">100</option>
+      </select>
+    </div>
+    <div class="col-md-2 col-sm-4 d-flex gap-2">
+      <button onclick="resetAndLoad()" class="btn-soc w-100" style="justify-content:center;border-color:var(--purple);color:var(--purple)">
+        <i class="fas fa-search me-1"></i>Filtrer
+      </button>
+      <button onclick="clearFilters()" class="btn-soc" style="padding:5px 12px">
+        <i class="fas fa-times"></i>
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- Table -->
+<div class="card-section" style="padding:0; overflow:hidden;">
+  <table class="table soc-table mb-0">
+    <thead>
+      <tr>
+        <th>Timestamp</th>
+        <th>Score</th>
+        <th>MSE Loss</th>
+        <th>Sévérité</th>
+        <th>IP source</th>
+        <th>Type</th>
+        <th>SSH user</th>
+        <th>Actions</th>
+        <th style="width:36px;"></th>
+      </tr>
+    </thead>
+    <tbody id="anomalyBody">
+      <tr class="loading-row"><td colspan="8"><i class="fas fa-spinner fa-spin me-2"></i>Chargement...</td></tr>
+    </tbody>
+  </table>
+</div>
+
+<!-- Pagination -->
+<div class="pagination-bar">
+  <button class="page-btn" id="btnPrev" onclick="prevPage()" disabled>
+    <i class="fas fa-chevron-left me-1"></i>Précédent
+  </button>
+  <span id="pageInfo" class="text-muted small">Page 1 / 1</span>
+  <button class="page-btn" id="btnNext" onclick="nextPage()" disabled>
+    Suivant<i class="fas fa-chevron-right ms-1"></i>
+  </button>
+  <span class="text-muted small ms-2" id="resultInfo">—</span>
+</div>
+
+<script>
+let currentPage = 1, currentSize = 25;
+let debounceTimer = null;
+let currentThreshold = 0.05;
+let _hits = [];
+
+const SEV_COLORS = { critical:'sev-critical', high:'sev-high', medium:'sev-medium', low:'sev-low' };
+
+function debounceLoad() {
+  clearTimeout(debounceTimer);
+  debounceTimer = setTimeout(() => { currentPage = 1; loadAnomalies(); }, 450);
+}
+function resetAndLoad() { currentPage = 1; loadAnomalies(); }
+
+function loadAnomalies() {
+  const dateFrom = document.getElementById('f_from').value;
+  const dateTo   = document.getElementById('f_to').value;
+  const params = new URLSearchParams({
+    page:      currentPage,
+    size:      currentSize,
+    min_score: document.getElementById('f_min_score').value,
+    max_score: document.getElementById('f_max_score').value,
+    src_ip:    document.getElementById('f_ip').value,
+    log_type:  document.getElementById('f_type').value,
+    severity:  document.getElementById('f_sev').value,
+    date_from: dateFrom ? new Date(dateFrom).toISOString() : 'now-24h',
+    date_to:   dateTo   ? new Date(dateTo).toISOString()   : 'now'
+  });
+  document.getElementById('anomalyBody').innerHTML =
+    '<tr class="loading-row"><td colspan="8"><i class="fas fa-spinner fa-spin me-2"></i>Chargement...</td></tr>';
+  fetch('/api/dl_anomalies_paged?' + params)
+    .then(r => r.json())
+    .then(data => renderAnomalies(data))
+    .catch(() => {
+      document.getElementById('anomalyBody').innerHTML =
+        '<tr class="loading-row"><td colspan="8" style="color:var(--red)">Erreur de chargement</td></tr>';
+    });
+}
+
+function renderAnomalies(data) {
+  const tbody = document.getElementById('anomalyBody');
+  const hits  = data.hits  || [];
+  const total = data.total || 0;
+
+  document.getElementById('pageInfo').textContent = `Page ${data.page} / ${data.pages}`;
+  document.getElementById('resultInfo').textContent = `${total.toLocaleString()} anomalie(s)`;
+  document.getElementById('btnPrev').disabled = data.page <= 1;
+  document.getElementById('btnNext').disabled = data.page >= data.pages;
+
+  if (!hits.length) {
+    tbody.innerHTML = '<tr class="loading-row"><td colspan="8">Aucune anomalie pour ces filtres</td></tr>';
+    return;
+  }
+
+  _hits = hits;
+  let html = '';
+  hits.forEach((h, idx) => {
+    const ts    = toLocal(h['@timestamp']);
+    const score = parseFloat(h.anomaly_score || 0);
+    const loss  = parseFloat(h.reconstruction_loss || 0);
+    const pct   = Math.min(100, Math.round(score * 100));
+    const sev   = h.severity || 'medium';
+    const sevCls = SEV_COLORS[sev] || 'sev-medium';
+    const scoreColor = score >= 0.7 ? '#f85149' : score >= 0.4 ? '#ffa657' : '#e3b341';
+    const lossColor  = loss > currentThreshold ? '#f85149' : '#3fb950';
+    const srcIp  = esc(h.src_ip || '—');
+    const logType = esc(h.log_type || '—');
+    const sshUser = esc(h.ssh_user || '—');
+    const anomalyTs = esc(h['@timestamp'] || '');
+
+    html += `<tr style="cursor:pointer" onclick="openDetail(${idx})" title="Voir le détail">
+      <td style="white-space:nowrap;color:var(--muted);font-size:0.78rem">${esc(ts)}</td>
+      <td style="min-width:110px">
+        <div class="score-bar-wrap">
+          <div class="score-bar">
+            <div class="score-bar-fill" style="width:${pct}%;background:${scoreColor}"></div>
+          </div>
+          <span style="font-family:monospace;font-size:0.78rem;color:${scoreColor};font-weight:600">${score.toFixed(3)}</span>
+        </div>
+      </td>
+      <td><span class="loss-pill" style="background:${lossColor}22;color:${lossColor};border:1px solid ${lossColor}44">${loss.toFixed(4)}</span></td>
+      <td><span class="badge-sev ${sevCls}">${esc(sev)}</span></td>
+      <td style="font-family:monospace;font-size:0.8rem;color:var(--purple)">${srcIp}</td>
+      <td><span class="type-mono">${logType}</span></td>
+      <td style="font-size:0.8rem;color:var(--muted)">${sshUser}</td>
+      <td onclick="event.stopPropagation()">
+        <button class="label-btn btn-tp"  onclick="label('${srcIp}','${anomalyTs}','TP',this)">✓TP</button>
+        <button class="label-btn btn-fp"  onclick="label('${srcIp}','${anomalyTs}','FP',this)">✗FP</button>
+        <button class="label-btn btn-ben" onclick="label('${srcIp}','${anomalyTs}','Benign',this)">~Bénin</button>
+      </td>
+      <td onclick="event.stopPropagation()">
+        <button class="label-btn" onclick="openDetail(${idx})" style="background:rgba(210,168,255,0.1);color:var(--purple);border:1px solid var(--purple);padding:3px 7px;" title="Détail">
+          <i class="fas fa-search-plus"></i>
+        </button>
+      </td>
+    </tr>`;
+  });
+  tbody.innerHTML = html;
+}
+
+function label(srcIp, anomalyTs, verdict, btn) {
+  btn.disabled = true;
+  btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
+  fetch('/api/anomaly/label', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({ model: 'autoencoder', src_ip: srcIp, anomaly_ts: anomalyTs, verdict })
+  })
+  .then(r => r.json())
+  .then(() => {
+    const colors = { TP: '#3fb950', FP: '#f85149', Benign: '#58a6ff' };
+    showToast(`<i class="fas fa-check me-2" style="color:${colors[verdict]}"></i>Labellisé : <strong>${verdict}</strong>`, colors[verdict]);
+    loadMetrics();
+    btn.innerHTML = verdict === 'TP' ? '✓TP' : verdict === 'FP' ? '✗FP' : '~Bénin';
+    btn.disabled = false;
+    btn.style.opacity = '0.5';
+  })
+  .catch(() => { btn.disabled = false; btn.innerHTML = verdict; });
+}
+
+function loadMetrics() {
+  fetch('/api/dl/metrics?window=24h')
+    .then(r => r.json())
+    .then(m => {
+      document.getElementById('m-total').textContent     = m.total ?? '—';
+      document.getElementById('m-labeled').textContent   = m.labeled ?? '—';
+      document.getElementById('m-precision').textContent = m.precision != null ? (m.precision*100).toFixed(1)+'%' : 'N/A';
+      document.getElementById('m-f1').textContent        = m.f1 != null ? m.f1.toFixed(3) : 'N/A';
+      document.getElementById('m-tp').textContent        = m.tp ?? '—';
+      document.getElementById('m-fp').textContent        = m.fp ?? '—';
+      document.getElementById('m-fn').textContent        = m.fn ?? '—';
+      document.getElementById('m-recall').textContent    = m.recall != null ? (m.recall*100).toFixed(1)+'%' : 'N/A';
+      const unverified = (m.total || 0) - (m.labeled || 0);
+      document.getElementById('m-unverified').textContent = unverified >= 0 ? unverified : '—';
+    }).catch(() => {});
+  // Load threshold
+  fetch('/api/dl_anomalies')
+    .then(r => r.json())
+    .then(d => {
+      if (d.anomalies && d.anomalies[0] && d.anomalies[0].threshold) {
+        currentThreshold = d.anomalies[0].threshold;
+        document.getElementById('m-threshold').textContent = currentThreshold.toFixed(4);
+      }
+    }).catch(() => {});
+}
+
+function exportCSV(e) {
+  e.preventDefault();
+  const params = new URLSearchParams({ model: 'dl', date_from: 'now-24h' });
+  window.location.href = '/api/anomalies/export?' + params;
+  showToast('<i class="fas fa-download me-2"></i>Export CSV en cours…');
+}
+
+function clearFilters() {
+  document.getElementById('f_min_score').value = 0;
+  document.getElementById('f_max_score').value = 1;
+  document.getElementById('lbl_min_score').textContent = '0.00';
+  document.getElementById('lbl_max_score').textContent = '1.00';
+  ['f_ip','f_type','f_sev','f_from','f_to'].forEach(id => {
+    const el = document.getElementById(id); if (el) el.value = '';
+  });
+  currentPage = 1; loadAnomalies();
+}
+
+function prevPage() { if (currentPage > 1) { currentPage--; loadAnomalies(); } }
+function nextPage() { currentPage++; loadAnomalies(); }
+
+function esc(s) {
+  return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+function showToast(msg, borderColor) {
+  const c = document.getElementById('toastContainer');
+  const t = document.createElement('div');
+  t.className = 'soc-toast';
+  if (borderColor) { t.style.borderLeftWidth = '3px'; t.style.borderLeftColor = borderColor; }
+  t.innerHTML = msg;
+  c.appendChild(t);
+  setTimeout(() => t.remove(), 3500);
+}
+
+loadMetrics();
+loadAnomalies();
+setInterval(() => { loadMetrics(); loadAnomalies(); }, 30000);
+
+// ── Detail Drawer ────────────────────────────────────────────────────────────
+function openDetail(idx) {
+  const h = _hits[idx];
+  if (!h) return;
+  document.getElementById('detailDrawer').classList.add('open');
+  document.getElementById('drawerOverlay').style.display = 'block';
+  populateDrawer(h);
+}
+function closeDrawer() {
+  document.getElementById('detailDrawer').classList.remove('open');
+  document.getElementById('drawerOverlay').style.display = 'none';
+}
+
+async function populateDrawer(h) {
+  const score = parseFloat(h.anomaly_score || 0);
+  const loss  = parseFloat(h.reconstruction_loss || 0);
+  const sev   = h.severity || 'medium';
+  const scoreColor = score >= 0.7 ? 'var(--red)' : score >= 0.4 ? 'var(--orange)' : 'var(--yellow)';
+  const lossColor  = loss > currentThreshold ? 'var(--red)' : 'var(--green)';
+  const ip = h.src_ip || '—';
+
+  document.getElementById('dw-title').innerHTML =
+    `<span class="badge-sev sev-${sev}" style="margin-right:8px;">${sev.toUpperCase()}</span>
+     Anomalie DL — <span style="font-family:monospace;color:var(--purple);">${esc(ip)}</span>`;
+
+  document.getElementById('dw-meta').innerHTML = `
+    <div style="display:flex;flex-wrap:wrap;gap:16px;font-size:0.82rem;margin-bottom:12px;">
+      <div><div style="font-size:0.65rem;color:var(--muted);text-transform:uppercase;letter-spacing:1px;">Score</div>
+        <div style="font-size:1.6rem;font-weight:800;color:${scoreColor};line-height:1;">${score.toFixed(3)}</div></div>
+      <div><div style="font-size:0.65rem;color:var(--muted);text-transform:uppercase;letter-spacing:1px;">MSE Loss</div>
+        <div style="font-size:1.2rem;font-weight:700;color:${lossColor};line-height:1;">${loss.toFixed(4)}</div>
+        <div style="font-size:0.62rem;color:var(--muted);">Seuil: ${currentThreshold.toFixed(4)}</div></div>
+      <div><div style="font-size:0.65rem;color:var(--muted);text-transform:uppercase;letter-spacing:1px;">Modèle</div>
+        <div style="font-size:0.85rem;font-weight:600;color:var(--purple);">Autoencoder DL</div></div>
+      <div><div style="font-size:0.65rem;color:var(--muted);text-transform:uppercase;letter-spacing:1px;">Type</div>
+        <div class="type-mono" style="font-size:0.82rem;">${esc(h.log_type||'—')}</div></div>
+      <div><div style="font-size:0.65rem;color:var(--muted);text-transform:uppercase;letter-spacing:1px;">SSH user</div>
+        <div style="font-size:0.82rem;color:var(--muted);">${esc(h.ssh_user||'—')}</div></div>
+      <div><div style="font-size:0.65rem;color:var(--muted);text-transform:uppercase;letter-spacing:1px;">Timestamp</div>
+        <div style="font-size:0.78rem;color:var(--muted);">${(h['@timestamp']||'').slice(0,19).replace('T',' ')}</div></div>
+    </div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px;">
+      <div style="font-size:0.72rem;color:var(--muted);width:100%;text-transform:uppercase;letter-spacing:1px;margin-bottom:4px;">Verdict — Labelliser cette anomalie</div>
+      <button class="label-btn btn-tp"  style="font-size:0.82rem;padding:6px 14px;" onclick="labelDrawer('${esc(ip)}','${esc(h['@timestamp']||'')}','TP',this)">
+        <i class="fas fa-check me-1"></i>Vrai Positif (TP)
+      </button>
+      <button class="label-btn btn-fp"  style="font-size:0.82rem;padding:6px 14px;" onclick="labelDrawer('${esc(ip)}','${esc(h['@timestamp']||'')}','FP',this)">
+        <i class="fas fa-times me-1"></i>Faux Positif (FP)
+      </button>
+      <button class="label-btn btn-ben" style="font-size:0.82rem;padding:6px 14px;" onclick="labelDrawer('${esc(ip)}','${esc(h['@timestamp']||'')}','Benign',this)">
+        <i class="fas fa-minus me-1"></i>Bénin
+      </button>
+    </div>`;
+
+  document.getElementById('dw-logs').innerHTML     = '<span style="color:var(--muted);font-size:0.78rem;"><i class="fas fa-spinner fa-spin me-1"></i>Chargement logs…</span>';
+  document.getElementById('dw-incidents').innerHTML = '<span style="color:var(--muted);font-size:0.78rem;"><i class="fas fa-spinner fa-spin me-1"></i>Chargement…</span>';
+
+  const logsR = ip !== '—'
+    ? await fetch(`/api/logs?src_ip=${encodeURIComponent(ip)}&size=10&date_from=now-24h`).then(r=>r.json()).catch(()=>({hits:[]}))
+    : {hits:[]};
+
+  const logHits = logsR.hits || [];
+  if (logHits.length) {
+    let lHtml = `<table style="width:100%;font-size:0.72rem;border-collapse:collapse;">
+      <thead><tr>
+        <th style="color:var(--muted);font-weight:400;padding:3px 6px;text-align:left;">Timestamp</th>
+        <th style="color:var(--muted);font-weight:400;padding:3px 6px;">Type</th>
+        <th style="color:var(--muted);font-weight:400;padding:3px 6px;">Sév.</th>
+        <th style="color:var(--muted);font-weight:400;padding:3px 6px;">Message</th>
+        <th style="width:28px;"></th>
+      </tr></thead><tbody>`;
+    logHits.forEach(l => {
+      const ls = l.severity || 'info';
+      const lts = (l['@timestamp']||'').slice(0,19).replace('T',' ');
+      const lmsg = (l.message||'').slice(0,60);
+      const llink = l._id && l._index ? `/logs/${encodeURIComponent(l._index)}/${encodeURIComponent(l._id)}` : '';
+      lHtml += `<tr style="border-top:1px solid var(--border);">
+        <td style="padding:4px 6px;white-space:nowrap;color:var(--muted);">${esc(lts)}</td>
+        <td style="padding:4px 6px;"><span class="type-mono" style="font-size:0.65rem;">${esc(l.log_type||'?')}</span></td>
+        <td style="padding:4px 6px;"><span class="badge-sev sev-${ls}" style="font-size:0.60rem;">${ls}</span></td>
+        <td style="padding:4px 6px;max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--muted);">${esc(lmsg)}</td>
+        <td style="padding:4px 2px;">${llink?`<a href="${llink}" class="btn-soc" style="padding:1px 5px;font-size:0.58rem;"><i class="fas fa-external-link-alt"></i></a>`:''}</td>
+      </tr>`;
+    });
+    lHtml += '</tbody></table>';
+    document.getElementById('dw-logs').innerHTML = lHtml;
+  } else {
+    document.getElementById('dw-logs').innerHTML = '<span style="color:var(--muted);font-size:0.75rem;">Aucun log trouvé pour cette IP.</span>';
+  }
+
+  const incData = await fetch('/api/incidents/stats').then(r=>r.json()).catch(()=>({}));
+  document.getElementById('dw-incidents').innerHTML = `
+    <div style="font-size:0.75rem;color:var(--muted);">
+      <i class="fas fa-info-circle me-1" style="color:var(--purple);"></i>
+      ${incData.total||0} incidents · ${incData.awaiting||0} en attente ·
+      <a href="/incidents" style="color:var(--purple);">Voir les incidents <i class="fas fa-external-link-alt" style="font-size:0.6rem;"></i></a>
+      ${ip !== '—' ? `<br><span style="font-size:0.68rem;margin-top:4px;display:inline-block;">Filtrer par IP <span style="font-family:monospace;color:var(--red);">${esc(ip)}</span> dans la <a href="/incidents" style="color:var(--purple);">liste incidents</a></span>` : ''}
+    </div>`;
+}
+
+function labelDrawer(srcIp, anomalyTs, verdict, btn) {
+  btn.disabled = true;
+  const orig = btn.innerHTML;
+  btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
+  fetch('/api/anomaly/label', {
+    method: 'POST',
+    headers: {'Content-Type':'application/json'},
+    body: JSON.stringify({ model: 'autoencoder', src_ip: srcIp, anomaly_ts: anomalyTs, verdict })
+  })
+  .then(r => r.json())
+  .then(() => {
+    const colors = { TP: '#3fb950', FP: '#f85149', Benign: '#58a6ff' };
+    showToast(`<i class="fas fa-check me-2" style="color:${colors[verdict]}"></i>Labellisé : <strong>${verdict}</strong>`, colors[verdict]);
+    loadMetrics();
+    btn.innerHTML = orig;
+    btn.style.opacity = '0.4';
+    btn.disabled = false;
+  })
+  .catch(() => { btn.innerHTML = orig; btn.disabled = false; });
+}
+</script>
+
+<!-- Detail Drawer -->
+<div id="detailDrawer" style="position:fixed;top:0;right:-480px;width:460px;max-width:96vw;height:100vh;background:var(--bg2);border-left:1px solid var(--border);z-index:2000;overflow-y:auto;transition:right 0.28s cubic-bezier(.4,0,.2,1);box-shadow:-4px 0 24px rgba(0,0,0,0.4);">
+  <div style="padding:20px;">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;">
+      <div id="dw-title" style="font-size:0.9rem;font-weight:700;color:var(--text);flex:1;"></div>
+      <button onclick="closeDrawer()" style="background:none;border:none;color:var(--muted);font-size:1.3rem;cursor:pointer;padding:0 4px;line-height:1;">×</button>
+    </div>
+    <div id="dw-meta"></div>
+    <div style="font-size:0.68rem;text-transform:uppercase;letter-spacing:1px;color:var(--purple);margin-bottom:8px;margin-top:4px;">
+      <i class="fas fa-file-alt me-1"></i>Logs liés — 24h (même IP)
+    </div>
+    <div id="dw-logs" style="background:var(--bg3);border-radius:8px;padding:10px;margin-bottom:12px;overflow-x:auto;"></div>
+    <div style="font-size:0.68rem;text-transform:uppercase;letter-spacing:1px;color:var(--orange);margin-bottom:8px;">
+      <i class="fas fa-shield-alt me-1"></i>Incidents
+    </div>
+    <div id="dw-incidents" style="background:var(--bg3);border-radius:8px;padding:10px;margin-bottom:12px;"></div>
+  </div>
+</div>
+<div id="drawerOverlay" onclick="closeDrawer()" style="display:none;position:fixed;inset:0;z-index:1999;background:rgba(0,0,0,0.4);"></div>
+
+{% endblock %}
