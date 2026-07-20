@@ -11,9 +11,11 @@ l'automatisation de la réponse à incident.
 - **Victime** : Apache · DVWA · SSH · Filebeat · Suricata
 - **Attaquant** : Hydra · Nmap · Nikto · SQLMap
 
-Schémas d'architecture disponibles : [architecture_mini_soc.drawio](architecture_mini_soc.drawio),
-[incident_lifecycle.drawio](incident_lifecycle.drawio), [workflow_analyste_soc.drawio](workflow_analyste_soc.drawio)
+Schémas d'architecture disponibles : [architecture_mini_soc.drawio](docs/architecture_mini_soc.drawio),
+[incident_lifecycle.drawio](docs/incident_lifecycle.drawio), [workflow_analyste_soc.drawio](docs/workflow_analyste_soc.drawio)
 (ouvrables avec [draw.io](https://app.diagrams.net/)).
+
+Documentation technique complète (formules ML, RAG, RBAC/NIST, MITRE, déploiement) : [docs/DOCUMENTATION.md](docs/DOCUMENTATION.md).
 
 ## Détection — Ensemble de 4 modèles
 
@@ -91,6 +93,12 @@ l'emploi pour tester la détection de bout en bout :
 - `T1110` Brute Force / `T1110.001` Password Guessing / `T1110.004` Credential Stuffing
 - `T1078` Valid Accounts
 
+## Limites connues
+
+Prototype académique validé en laboratoire (volume de logs limité, scénarios d'attaque
+prédéfinis) — pas un remplaçant direct d'un SOC commercial en production. Détail complet
+dans [docs/DOCUMENTATION.md § 22](docs/DOCUMENTATION.md#22-limites-connues--perspectives).
+
 ## Licence
 
-Projet académique (PFA) à but pédagogique.
+MIT — voir [LICENSE](LICENSE). Projet académique (PFA) à but pédagogique, INPT 2025–2026.
