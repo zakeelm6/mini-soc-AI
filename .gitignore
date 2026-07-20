@@ -1,9 +1,0 @@
-__pycache__/
-*.pyc
-*.pkl
-.env
-venv/
-.venv/
-*.log
-nohup.out
-.DS_Store
